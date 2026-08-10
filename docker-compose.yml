@@ -1,0 +1,9 @@
+services:
+  health-hub:
+    build: .
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./data:/data
+    env_file:
+      - .env

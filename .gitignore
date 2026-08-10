@@ -1,0 +1,21 @@
+# Deepwork state (git-local, OpenCode-visible)
+.slim/deepwork/
+
+# Environment secrets
+.env
+
+# Database files
+data/
+*.sqlite3
+*.db
+
+# Python
+__pycache__/
+.venv/
+.pytest_cache/
+
+# Credentials & personal data
+creds.txt
+tests/fixtures/payload_real.json
+.coverage
+.ruff_cache/

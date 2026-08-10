@@ -1,0 +1,137 @@
+{
+  "timestamp": "2026-08-09T12:00:00Z",
+  "app_version": "1.4.0",
+  "source": "health_connect",
+  "steps": [
+    {"count": 1234, "start_time": "2026-08-09T08:00:00Z", "end_time": "2026-08-09T09:00:00Z"},
+    {"count": 567, "start_time": "2026-08-09T09:00:00Z", "end_time": "2026-08-09T10:00:00Z"}
+  ],
+  "distance": [
+    {"meters": 820.5, "start_time": "2026-08-09T08:00:00Z", "end_time": "2026-08-09T09:00:00Z"},
+    {"meters": 410.0, "start_time": "2026-08-09T09:00:00Z", "end_time": "2026-08-09T10:00:00Z"}
+  ],
+  "active_calories": [
+    {"calories": 45.2, "start_time": "2026-08-09T08:00:00Z", "end_time": "2026-08-09T09:00:00Z"},
+    {"calories": 30.0, "start_time": "2026-08-09T09:00:00Z", "end_time": "2026-08-09T10:00:00Z"}
+  ],
+  "total_calories": [
+    {"calories": 245.1, "start_time": "2026-08-09T00:00:00Z", "end_time": "2026-08-09T06:00:00Z"},
+    {"calories": 410.8, "start_time": "2026-08-09T06:00:00Z", "end_time": "2026-08-09T12:00:00Z"}
+  ],
+  "exercise": [
+    {"type": "running", "duration_seconds": 1800, "start_time": "2026-08-09T08:00:00Z", "end_time": "2026-08-09T08:30:00Z"},
+    {"type": "cycling", "duration_seconds": 2700, "start_time": "2026-08-09T18:00:00Z", "end_time": "2026-08-09T18:45:00Z"}
+  ],
+  "hydration": [
+    {"liters": 0.35, "start_time": "2026-08-09T08:00:00Z", "end_time": "2026-08-09T09:00:00Z"},
+    {"liters": 0.5, "start_time": "2026-08-09T09:00:00Z", "end_time": "2026-08-09T10:00:00Z"}
+  ],
+  "nutrition": [
+    {"calories": 320, "protein_grams": 18, "carbs_grams": 40, "fat_grams": 8, "start_time": "2026-08-09T08:00:00Z", "end_time": "2026-08-09T09:00:00Z"},
+    {"calories": 540, "protein_grams": 30, "carbs_grams": 60, "fat_grams": 15, "start_time": "2026-08-09T13:00:00Z", "end_time": "2026-08-09T14:00:00Z"}
+  ],
+  "mindfulness": [
+    {"title": "Morning calm", "duration_seconds": 600, "start_time": "2026-08-09T07:00:00Z", "end_time": "2026-08-09T07:10:00Z"},
+    {"title": "Evening wind-down", "duration_seconds": 900, "start_time": "2026-08-09T21:00:00Z", "end_time": "2026-08-09T21:15:00Z"}
+  ],
+  "menstruation_period": [
+    {"start_time": "2026-08-01T00:00:00Z", "end_time": "2026-08-05T00:00:00Z"},
+    {"start_time": "2026-08-29T00:00:00Z", "end_time": "2026-09-02T00:00:00Z"}
+  ],
+  "sleep": [
+    {
+      "session_end_time": "2026-08-09T07:00:00Z",
+      "duration_seconds": 28800,
+      "stages": [
+        {"stage": "deep", "start_time": "2026-08-08T23:00:00Z", "end_time": "2026-08-09T01:00:00Z", "duration_seconds": 7200},
+        {"stage": "light", "start_time": "2026-08-09T01:00:00Z", "end_time": "2026-08-09T04:00:00Z", "duration_seconds": 10800},
+        {"stage": "rem", "start_time": "2026-08-09T04:00:00Z", "end_time": "2026-08-09T05:30:00Z", "duration_seconds": 5400},
+        {"stage": "light", "start_time": "2026-08-09T05:30:00Z", "end_time": "2026-08-09T07:00:00Z", "duration_seconds": 5400}
+      ]
+    },
+    {
+      "session_end_time": "2026-08-08T07:00:00Z",
+      "duration_seconds": 25200,
+      "stages": [
+        {"stage": "deep", "start_time": "2026-08-08T00:30:00Z", "end_time": "2026-08-08T02:30:00Z", "duration_seconds": 7200},
+        {"stage": "light", "start_time": "2026-08-08T02:30:00Z", "end_time": "2026-08-08T05:00:00Z", "duration_seconds": 9000},
+        {"stage": "rem", "start_time": "2026-08-08T05:00:00Z", "end_time": "2026-08-08T07:00:00Z", "duration_seconds": 7200}
+      ]
+    }
+  ],
+  "heart_rate": [
+    {"bpm": 72, "time": "2026-08-09T08:30:00Z"},
+    {"bpm": 75, "time": "2026-08-09T08:35:00Z"},
+    {"bpm": 80, "time": "2026-08-09T09:00:00Z"},
+    {"bpm": 78, "time": "2026-08-09T09:15:00Z"},
+    {"bpm": 72, "time": "2026-08-09T09:30:00Z"}
+  ],
+  "resting_heart_rate": [
+    {"bpm": 58, "time": "2026-08-09T06:30:00Z"},
+    {"bpm": 60, "time": "2026-08-08T06:30:00Z"}
+  ],
+  "heart_rate_variability": [
+    {"heart_rate_variability_millis": 52.3, "time": "2026-08-09T06:30:00Z"},
+    {"heart_rate_variability_millis": 48.1, "time": "2026-08-08T06:30:00Z"}
+  ],
+  "blood_pressure": [
+    {"systolic": 118.0, "diastolic": 76.0, "time": "2026-08-09T08:00:00Z"},
+    {"systolic": 122.0, "diastolic": 80.0, "time": "2026-08-09T20:00:00Z"}
+  ],
+  "blood_glucose": [
+    {"mmol_per_liter": 5.4, "time": "2026-08-09T07:30:00Z"},
+    {"mmol_per_liter": 7.8, "time": "2026-08-09T13:30:00Z"}
+  ],
+  "oxygen_saturation": [
+    {"percentage": 97.5, "time": "2026-08-09T08:00:00Z"},
+    {"percentage": 98.0, "time": "2026-08-09T20:00:00Z"}
+  ],
+  "respiratory_rate": [
+    {"rate": 14.0, "time": "2026-08-09T08:00:00Z"},
+    {"rate": 13.5, "time": "2026-08-09T20:00:00Z"}
+  ],
+  "body_temperature": [
+    {"celsius": 36.6, "time": "2026-08-09T08:00:00Z"},
+    {"celsius": 36.7, "time": "2026-08-09T20:00:00Z"}
+  ],
+  "weight": [
+    {"kilograms": 72.4, "time": "2026-08-09T08:00:00Z"},
+    {"kilograms": 72.1, "time": "2026-08-08T08:00:00Z"}
+  ],
+  "height": [
+    {"meters": 1.78, "time": "2026-08-09T08:00:00Z"},
+    {"meters": 1.78, "time": "2026-01-01T08:00:00Z"}
+  ],
+  "body_fat": [
+    {"percentage": 18.5, "time": "2026-08-09T08:00:00Z"},
+    {"percentage": 18.8, "time": "2026-08-01T08:00:00Z"}
+  ],
+  "lean_body_mass": [
+    {"kilograms": 59.0, "time": "2026-08-09T08:00:00Z"},
+    {"kilograms": 58.7, "time": "2026-08-01T08:00:00Z"}
+  ],
+  "bone_mass": [
+    {"kilograms": 3.1, "time": "2026-08-09T08:00:00Z"},
+    {"kilograms": 3.1, "time": "2026-08-01T08:00:00Z"}
+  ],
+  "body_water_mass": [
+    {"kilograms": 38.5, "time": "2026-08-09T08:00:00Z"},
+    {"kilograms": 38.2, "time": "2026-08-01T08:00:00Z"}
+  ],
+  "menstruation_flow": [
+    {"flow": "light", "time": "2026-08-01T08:00:00Z"},
+    {"flow": "medium", "time": "2026-08-02T08:00:00Z"}
+  ],
+  "_diagnostics": {
+    "steps": {
+      "permission_granted": true,
+      "page_count": 3,
+      "raw_record_count": 2841,
+      "filtered_record_count": 1000,
+      "min_time": "2026-07-10T00:00:00Z",
+      "max_time": "2026-08-09T23:59:59Z",
+      "last_sync": "2026-08-09T12:00:00Z",
+      "error": null
+    }
+  }
+}

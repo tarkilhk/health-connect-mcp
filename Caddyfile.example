@@ -1,0 +1,11 @@
+# Copy to Caddyfile and replace the domain.
+health.example.com {
+    handle /mcp* {
+        reverse_proxy 127.0.0.1:8000 {
+            flush_interval -1   # required: streaming hangs without it
+        }
+    }
+    handle {
+        reverse_proxy 127.0.0.1:8000
+    }
+}
