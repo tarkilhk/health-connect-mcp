@@ -1,0 +1,32 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.naymEvg/health-mcp",
+  "title": "Health Hub MCP",
+  "description": "Self-hosted MCP server for Android Health Connect data. Ingests 34 health metric types (steps, heart rate, sleep, calories, SpO2, weight, body composition) from companion Android apps, normalizes and deduplicates records, and exposes daily aggregated rollups to LLM clients through 5 MCP tools.",
+  "version": "0.1.0",
+  "websiteUrl": "https://github.com/naymEvg/health-conect-mcp",
+  "repository": {
+    "url": "https://github.com/naymEvg/health-conect-mcp",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://{host}/mcp",
+      "variables": {
+        "host": {
+          "description": "Your server's public hostname with TLS (e.g., health.example.com). Deploy via Docker Compose — see repo README.",
+          "isRequired": true
+        }
+      },
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "MCP authentication token. Set MCP_TOKEN in .env, generate with: openssl rand -hex 32. Include 'Bearer ' prefix.",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
