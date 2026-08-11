@@ -6,9 +6,10 @@ Personal MCP server that ingests Health Connect data from an Android companion a
 
 ```
 Android 14+ ──POST /ingest/health──────▶ ┌──────────────────┐
-            ──POST /ingest/screentime──▶ │   Health Hub     │──MCP──▶ LLM
-                                          │   SQLite         │
-                  browser ──GET /debug──▶ └──────────────────┘
+  (companion app)                         │                  │
+Android 14+ ──POST /ingest/hc-webhook──▶ │   Health Hub     │──MCP──▶ LLM
+  (HC Webhook client)                     │   SQLite         │
+                   browser ──GET /debug──▶ └──────────────────┘
 ```
 
 The companion app reads raw records from Health Connect and pushes them to this server. The server normalizes, deduplicates, and rolls them up into daily aggregates, then exposes them to LLM clients (Claude, Perplexity, OpenCode) through five MCP tools. Raw events are never handed to the model by default — only rolled-up summaries with explicit `caveats` so the model cannot silently fabricate missing data.
@@ -25,6 +26,23 @@ cp .env.example .env
 docker compose up -d --build
 curl -s http://localhost:8000/health
 ```
+
+## Companion Apps
+
+The server accepts health data from **two** Android apps via separate endpoints. Both write to the same database and use content-hash deduplication — sending the same data from both apps will not double-count.
+
+| App | Endpoint | Format | Best for |
+|-----|----------|--------|----------|
+| [life-dashboard-companion-app](https://github.com/owen282000/life-dashboard-companion-app) v1.4.0 | `POST /ingest/health` | `source: "health_connect"` required | Incremental sync, 200 records per type |
+| [HC Webhook](https://github.com/mcnaveen/health-connect-webhook) | `POST /ingest/hc-webhook` | `source` optional, `rmssd_millis` HRV, extra types | Full sync, all types in one POST |
+
+Both endpoints require:
+```
+Authorization: Bearer <DEVICE_TOKEN>
+Content-Type: application/json; charset=utf-8
+```
+
+The HC Webhook endpoint also accepts 5 additional Health Connect types not present in the companion app: `skin_temperature`, `basal_metabolic_rate`, `vo2_max`, `intermenstrual_bleeding`, `body_water_mass`. Unknown type keys are silently tolerated — only types in the server's registry are processed.
 
 ## Connect Your Phone
 See [docs/ANDROID.md](docs/ANDROID.md) for step-by-step instructions.

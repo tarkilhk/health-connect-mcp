@@ -775,3 +775,203 @@ async def test_recalc_failure_rolls_back_events_and_returns_500(client, db, monk
     assert await _count(db, "SELECT count(*) FROM daily_rollups") == 0
     # L0 raw_payloads survived (committed separately).
     assert await _count(db, "SELECT count(*) FROM raw_payloads") == 1
+
+
+# --- POST /ingest/hc-webhook ------------------------------------------------
+
+
+def _hc_payload(**overrides) -> dict:
+    """Build a minimal HC Webhook format payload (no `source` field)."""
+    payload: dict = {
+        "timestamp": "2026-08-10T12:00:00Z",
+        "app_version": "2.0.0",
+        # NO source field — HCWebhookPayload defaults it to "health_connect".
+        "heart_rate_variability": [
+            {"rmssd_millis": 45.5, "time": "2026-08-10T08:00:00Z"}
+        ],
+        "steps": [
+            {"count": 1234, "start_time": "2026-08-10T08:00:00Z", "end_time": "2026-08-10T09:00:00Z"}
+        ],
+    }
+    payload.update(overrides)
+    return payload
+
+
+async def test_hc_webhook_valid_payload_stores_events(client, db):
+    """HC Webhook format (no source, rmssd_millis HRV) -> 200, events stored."""
+    payload = _hc_payload()
+    body = json.dumps(payload).encode()
+    response = await client.post(
+        "/ingest/hc-webhook",
+        content=body,
+        headers=_auth_headers({"X-Signature": _sign(body)}),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    # 1 HRV + 1 steps = 2 events.
+    assert data["received"] == 2
+    assert data["stored"] == 2
+    assert data["duplicates"] == 0
+    assert data["errors"] == []
+    assert data["payload_id"] > 0
+
+    # HRV event stored with value_num mapped from rmssd_millis -> 45.5.
+    cursor = await db.execute(
+        "SELECT value_num FROM events WHERE data_type = ?",
+        ("heart_rate_variability",),
+    )
+    row = await cursor.fetchone()
+    assert row is not None
+    assert row[0] == 45.5
+
+    # Steps event stored.
+    assert await _count(db, "SELECT count(*) FROM events WHERE data_type = 'steps'") == 1
+    # raw_payloads source = health_connect.
+    cursor = await db.execute("SELECT source FROM raw_payloads")
+    assert (await cursor.fetchone())[0] == "health_connect"
+
+
+async def test_hc_webhook_int_menstruation_flow_mapped_to_string(client, db):
+    """HC Webhook int flow=2 -> stored as 'medium' string in value_json."""
+    payload = _hc_payload(
+        menstruation_flow=[
+            {"flow": 2, "time": "2026-08-10T08:00:00Z"}
+        ],
+    )
+    body = json.dumps(payload).encode()
+    response = await client.post(
+        "/ingest/hc-webhook",
+        content=body,
+        headers=_auth_headers({"X-Signature": _sign(body)}),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["stored"] >= 1
+    assert data["errors"] == []
+
+    # menstruation_flow event value_json contains "medium" (mapped from int 2).
+    cursor = await db.execute(
+        "SELECT value_json FROM events WHERE data_type = ?",
+        ("menstruation_flow",),
+    )
+    row = await cursor.fetchone()
+    assert row is not None
+    stored_rec = json.loads(row[0])
+    assert stored_rec["flow"] == "medium"
+
+
+async def test_hc_webhook_new_type_skin_temperature(client, db):
+    """HC Webhook skin_temperature (new registry type) -> event created."""
+    payload = _hc_payload(
+        skin_temperature=[
+            {"time": "2026-08-10T08:00:00Z", "delta_celsius": 0.5,
+             "baseline_celsius": 36.6, "measurement_location": 1}
+        ],
+    )
+    body = json.dumps(payload).encode()
+    response = await client.post(
+        "/ingest/hc-webhook",
+        content=body,
+        headers=_auth_headers({"X-Signature": _sign(body)}),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["errors"] == []
+
+    # skin_temperature event created with value_num = 0.5 (delta_celsius).
+    cursor = await db.execute(
+        "SELECT value_num, value_json FROM events WHERE data_type = ?",
+        ("skin_temperature",),
+    )
+    row = await cursor.fetchone()
+    assert row is not None
+    assert row[0] == 0.5
+    rec = json.loads(row[1])
+    assert rec["delta_celsius"] == 0.5
+
+
+async def test_hc_webhook_no_source_field_defaults_and_200(client, db):
+    """Payload without `source` -> 200 (default 'health_connect' applied)."""
+    payload = _hc_payload()
+    assert "source" not in payload  # sanity: HC format omits source
+    body = json.dumps(payload).encode()
+    response = await client.post(
+        "/ingest/hc-webhook",
+        content=body,
+        headers=_auth_headers({"X-Signature": _sign(body)}),
+    )
+    assert response.status_code == 200
+    assert response.json()["stored"] >= 1
+
+
+async def test_hc_webhook_invalid_body_returns_400(client, db):
+    """HC Webhook non-JSON body -> 400 with invalid_json error."""
+    body = b"not json at all"
+    response = await client.post(
+        "/ingest/hc-webhook",
+        content=body,
+        headers=_auth_headers({"X-Signature": _sign(body)}),
+    )
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_json"
+    cursor = await db.execute("SELECT parse_error FROM raw_payloads")
+    assert (await cursor.fetchone())[0] is not None
+
+
+async def test_hc_webhook_missing_auth_returns_401(client):
+    """HC Webhook without Authorization -> 401, no raw stored."""
+    body = json.dumps(_hc_payload()).encode()
+    response = await client.post(
+        "/ingest/hc-webhook",
+        content=body,
+        headers={"X-Signature": _sign(body)},  # no Authorization
+    )
+    assert response.status_code == 401
+
+
+async def test_hc_webhook_malformed_hrv_record_does_not_crash(client, db):
+    """H1: malformed HRV record (string, not dict) -> 200, valid steps stored,
+    error reported for the malformed HRV record. No 500."""
+    payload = _hc_payload()
+    # Mix valid dict + malformed non-dict entries in heart_rate_variability.
+    payload["heart_rate_variability"] = [
+        {"rmssd_millis": 45.5, "time": "2026-08-10T08:00:00Z"},
+        "not-a-dict",  # malformed — must be skipped, not crash
+        None,
+    ]
+    body = json.dumps(payload).encode()
+    response = await client.post(
+        "/ingest/hc-webhook",
+        content=body,
+        headers=_auth_headers({"X-Signature": _sign(body)}),
+    )
+    assert response.status_code == 200
+    data = response.json()
+    # Valid HRV + 1 steps = 2 stored.
+    assert data["stored"] == 2
+    # The 2 malformed HRV records reported as errors.
+    hrv_errors = [e for e in data["errors"] if e["type"] == "heart_rate_variability"]
+    assert len(hrv_errors) == 2
+    assert {e["index"] for e in hrv_errors} == {1, 2}
+    # Valid HRV event still landed.
+    assert await _count(
+        db, "SELECT count(*) FROM events WHERE data_type = 'heart_rate_variability'"
+    ) == 1
+    assert await _count(
+        db, "SELECT count(*) FROM events WHERE data_type = 'steps'"
+    ) == 1
+
+
+async def test_hc_webhook_unknown_keys_ignored_not_rejected(client, db):
+    """HCWebhookPayload accepts unknown keys — normalize ignores them, no 400."""
+    payload = _hc_payload()
+    payload["device"] = "Pixel 8"  # unknown key, silently ignored
+    payload["some_future_type"] = [{"x": 1}]  # also ignored
+    body = json.dumps(payload).encode()
+    response = await client.post(
+        "/ingest/hc-webhook",
+        content=body,
+        headers=_auth_headers({"X-Signature": _sign(body)}),
+    )
+    assert response.status_code == 200  # not 400 — unknown keys tolerated
+    assert response.json()["stored"] > 0  # known types still processed

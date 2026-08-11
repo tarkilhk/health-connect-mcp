@@ -29,7 +29,10 @@ def test_full_payload_event_count_matches_input():
     assert errors == []
     assert len(events) == _count_input_records(payload)
     assert len(events) >= 29
-    assert {e.data_type for e in events} == set(TYPE_REGISTRY.keys())
+    # Fixture covers the 25 original types; the 4 HC-Webhook-only types
+    # (skin_temperature, basal_metabolic_rate, vo2_max, intermenstrual_bleeding)
+    # are absent. Every event type must still be a valid registry key.
+    assert {e.data_type for e in events} <= set(TYPE_REGISTRY.keys())
     assert len([e for e in events if e.data_type == "heart_rate"]) == 5
 
 

@@ -3,8 +3,8 @@ from health_hub.contract.kinds import RecordKind
 from health_hub.contract.registry import TYPE_REGISTRY
 
 
-def test_registry_has_25_entries():
-    assert len(TYPE_REGISTRY) == 25
+def test_registry_has_34_entries():
+    assert len(TYPE_REGISTRY) == 34
 
 
 def test_no_duplicate_json_keys():
@@ -18,7 +18,7 @@ def test_json_key_matches_dict_key():
 
 
 def test_registry_matches_full_contract():
-    """M4: comprehensive check of (kind, value_field, cumulative) for all 25 types.
+    """M4: comprehensive check of (kind, value_field, cumulative) for all 29 types.
 
     Replaces scattered shallow checks with one authoritative mapping. Any
     missing-field or wrong-value bug fails here.
@@ -49,6 +49,15 @@ def test_registry_matches_full_contract():
         "bone_mass": (RecordKind.INSTANT, "kilograms", False),
         "body_water_mass": (RecordKind.INSTANT, "kilograms", False),
         "menstruation_flow": (RecordKind.INSTANT, "flow", False),
+        "skin_temperature": (RecordKind.INSTANT, "delta_celsius", False),
+        "basal_metabolic_rate": (RecordKind.INSTANT, "watts", False),
+        "vo2_max": (RecordKind.INSTANT, "ml_per_kg_per_min", False),
+        "intermenstrual_bleeding": (RecordKind.INSTANT, None, False),
+        "basal_body_temperature": (RecordKind.INSTANT, None, False),
+        "cervical_mucus": (RecordKind.INSTANT, None, False),
+        "ovulation_test": (RecordKind.INSTANT, None, False),
+        "sexual_activity": (RecordKind.INSTANT, None, False),
+        "test": (RecordKind.INSTANT, None, False),
     }
     assert set(TYPE_REGISTRY.keys()) == set(expected.keys())
     for key, (kind, value_field, cumulative) in expected.items():

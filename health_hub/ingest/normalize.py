@@ -48,6 +48,39 @@ def normalize_health_payload(
     return events, stages, errors
 
 
+def normalize_hc_webhook_payload(payload: dict) -> tuple[list[Event], list[dict], list[dict]]:
+    """Convert HC Webhook format to internal format, then normalize.
+
+    Transforms:
+    - heart_rate_variability: rmssd_millis → heart_rate_variability_millis
+    - menstruation_flow: int flow → string (0=unknown, 1=light, 2=medium, 3=heavy)
+    """
+    from copy import deepcopy
+    normalized = deepcopy(payload)
+
+    # Map HRV field name
+    hrv = normalized.get("heart_rate_variability")
+    if hrv:
+        for rec in hrv:
+            if not isinstance(rec, dict):
+                continue  # malformed — delegate handles it
+            if "rmssd_millis" in rec:
+                rec["heart_rate_variability_millis"] = rec.pop("rmssd_millis")
+
+    # Map menstruation_flow int → string
+    flow_map = {0: "unknown", 1: "light", 2: "medium", 3: "heavy"}
+    mf = normalized.get("menstruation_flow")
+    if mf:
+        for rec in mf:
+            if not isinstance(rec, dict):
+                continue
+            flow_val = rec.get("flow")
+            if isinstance(flow_val, int) and not isinstance(flow_val, bool):
+                rec["flow"] = flow_map.get(flow_val, "unknown")
+
+    return normalize_health_payload(normalized)
+
+
 def _get_records(payload: dict, key: str) -> list:
     """Return payload[key] if it is a list, else []."""
     raw = payload.get(key)

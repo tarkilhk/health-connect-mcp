@@ -325,7 +325,7 @@ async def test_get_sync_health_no_data(client):
     sid = await _init_session(client)
     result = await _call_tool(client, sid, "get_sync_health", {"days": 7})
     assert result["period_days"] == 7
-    assert len(result["metrics"]) == 25  # all data types
+    assert len(result["metrics"]) == 34  # all data types
     assert all(m["coverage_days"] == 0 for m in result["metrics"])
     assert len(result["caveats"]) > 0
 

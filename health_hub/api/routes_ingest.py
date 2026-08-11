@@ -23,9 +23,9 @@ from starlette.routing import Route
 
 from health_hub.aggregate.timewindow import local_date_of
 from health_hub.api.auth import verify_signature, verify_token
-from health_hub.contract.payload import HealthPayload, ScreenTimePayload
+from health_hub.contract.payload import HCWebhookPayload, HealthPayload, ScreenTimePayload
 from health_hub.ingest.diagnostics import store_diagnostics
-from health_hub.ingest.normalize import normalize_health_payload
+from health_hub.ingest.normalize import normalize_health_payload, normalize_hc_webhook_payload
 from health_hub.ingest.raw_store import store_raw_payload
 from health_hub.ingest.writer import (
     upsert_events,
@@ -149,6 +149,131 @@ async def ingest_health(request: Request) -> JSONResponse:
         # events are NOT committed without their rollups.
         await db.rollback()
         log.exception("Unexpected error during /ingest/health")
+        return JSONResponse(
+            {"error": "internal_error", "detail": str(exc), "payload_id": payload_id},
+            status_code=500,
+        )
+
+    return JSONResponse(
+        {
+            "payload_id": payload_id,
+            "received": len(events),
+            "stored": stored,
+            "duplicates": duplicates,
+            "errors": errors,
+            "rollups_updated": rollups_updated,
+        },
+        status_code=200,
+    )
+
+
+async def ingest_hc_webhook(request: Request) -> JSONResponse:
+    """Receive an HC Webhook client payload, normalize, and store events.
+
+    Same L1 pipeline as /ingest/health but accepts the HC Webhook format:
+    no ``source`` field (defaults to ``health_connect``), ``rmssd_millis``
+    for HRV, integer ``menstruation_flow.flow``, and the 5 extra types.
+    """
+    settings = request.app.state.settings
+    db: aiosqlite.Connection = request.app.state.db
+
+    # 1. Read raw body.
+    body = await request.body()
+
+    # 2. Token check — 401 before any DB write.
+    if not verify_token(request.headers.get("Authorization"), settings.device_token):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    # 3. Signature check — set flag; raw_payload is stored regardless.
+    sig_header = request.headers.get("X-Signature")
+    sig_valid = verify_signature(body, sig_header, settings.signing_key)
+
+    # 4. Store raw payload BEFORE any validation (L0, committed separately).
+    payload_id = await store_raw_payload(db, "health_connect", body, sig_valid)
+
+    # If signature verification is active and failed, stop here.
+    if not sig_valid:
+        return JSONResponse(
+            {"error": "invalid_signature", "payload_id": payload_id},
+            status_code=401,
+        )
+
+    # 5. Parse JSON. On failure, mark parse_error and return 400.
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        await _mark_parse_error(db, payload_id, str(exc))
+        return JSONResponse(
+            {"error": "invalid_json", "payload_id": payload_id},
+            status_code=400,
+        )
+
+    # 6a. Top-level must be a dict.
+    if not isinstance(payload, dict):
+        await _mark_parse_error(
+            db, payload_id, f"top-level JSON is {type(payload).__name__}, expected object"
+        )
+        return JSONResponse(
+            {"error": "invalid_json", "payload_id": payload_id},
+            status_code=400,
+        )
+
+    # 6b. Validate envelope via HCWebhookPayload (timestamp, app_version
+    # required; source defaults to "health_connect").
+    try:
+        HCWebhookPayload.model_validate(payload)
+    except ValidationError as exc:
+        await _mark_parse_error(db, payload_id, str(exc))
+        return JSONResponse(
+            {"error": "invalid_envelope", "payload_id": payload_id, "detail": str(exc)},
+            status_code=400,
+        )
+
+    # 6c. Extract envelope fields and enrich the raw_payloads row (L0 update).
+    await _enrich_raw_payload(
+        db,
+        payload_id,
+        app_version=payload.get("app_version"),
+        payload_timestamp=payload.get("timestamp"),
+    )
+
+    # 7. Normalize (pure, no DB) — maps HC Webhook quirks to internal format.
+    events, stages, errors = normalize_hc_webhook_payload(payload)
+
+    # 8-10. L1 writes in a single transaction.
+    try:
+        stored, duplicates = await upsert_events(db, events, payload_id)
+        await upsert_sleep_stages(db, stages)
+        if isinstance(payload.get("_diagnostics"), dict):
+            await store_diagnostics(db, payload_id, payload["_diagnostics"])
+
+        # Recalculate daily rollups for every local date touched.
+        affected: set[str] = set()
+        for evt in events:
+            instant = evt.end_utc if evt.data_type == "sleep" else evt.start_utc
+            affected.add(
+                local_date_of(
+                    instant, settings.timezone, settings.day_boundary_hour
+                )
+            )
+        rollups_updated = await recalc_rollups_for_dates(
+            db,
+            sorted(affected),
+            settings.timezone,
+            settings.day_boundary_hour,
+        )
+
+        await db.commit()
+    except aiosqlite.Error as exc:
+        await db.rollback()
+        log.exception("DB error during /ingest/hc-webhook")
+        return JSONResponse(
+            {"error": "db_error", "detail": str(exc), "payload_id": payload_id},
+            status_code=500,
+        )
+    except Exception as exc:
+        await db.rollback()
+        log.exception("Unexpected error during /ingest/hc-webhook")
         return JSONResponse(
             {"error": "internal_error", "detail": str(exc), "payload_id": payload_id},
             status_code=500,
@@ -321,6 +446,7 @@ async def _enrich_raw_payload(
 
 routes: list[Route] = [
     Route("/ingest/health", ingest_health, methods=["POST"]),
+    Route("/ingest/hc-webhook", ingest_hc_webhook, methods=["POST"]),
     Route("/ingest/screentime", ingest_screentime, methods=["POST"]),
     Route("/ingest/echo", ingest_echo, methods=["POST"]),
 ]

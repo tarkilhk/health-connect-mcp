@@ -43,6 +43,18 @@ class ScreenTimePayload(BaseModel):
     source: str
 
 
+class HCWebhookPayload(BaseModel):
+    """HC Webhook client format — same as HealthPayload but source is optional.
+    
+    Unknown type keys are allowed (client may send types not yet in our registry).
+    The normalizer silently ignores types not in TYPE_REGISTRY.
+    """
+    timestamp: str
+    app_version: str
+    source: str = "health_connect"
+    model_config = {"extra": "allow"}
+
+
 @dataclass
 class Event:
     """One normalized record ready for DB insertion."""
