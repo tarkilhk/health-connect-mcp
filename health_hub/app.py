@@ -71,11 +71,13 @@ async def lifespan(app: Starlette) -> AsyncIterator[None]:
 
 def create_app() -> Starlette:
     settings = load_settings()
-    mcp_app = create_mcp_app(settings)
+    mcp_app = create_mcp_app(settings, "/mcp")
+    # Also serve at /mcp-health for MCP Registry compatibility
+    mcp_health_app = create_mcp_app(settings, "/mcp-health")
     # Extract the MCP app's routes directly into the parent so POST /mcp
     # works without a trailing-slash redirect (Mount("/mcp", ...) would 307
     # to /mcp/ and break the SPEC §9 acceptance curl).
-    mcp_routes = list(mcp_app.routes)
+    mcp_routes = list(mcp_app.routes) + list(mcp_health_app.routes)
     app = Starlette(
         debug=settings.log_level.upper() == "DEBUG",
         routes=health_routes + ingest_routes + debug_routes + mcp_routes,

@@ -46,7 +46,7 @@ def get_db() -> aiosqlite.Connection:
     return _db
 
 
-def create_mcp_app(settings: Settings) -> Starlette:
+def create_mcp_app(settings: Settings, path: str = "/mcp") -> Starlette:
     """Build the streamable-HTTP Starlette app for the MCP server.
 
     Called once during ``create_app()`` so that ``mcp.session_manager`` is
@@ -55,7 +55,7 @@ def create_mcp_app(settings: Settings) -> Starlette:
     works without a trailing-slash redirect.
     """
     return mcp.streamable_http_app(
-        streamable_http_path="/mcp",
+        streamable_http_path=path,
         transport_security=TransportSecuritySettings(
             allowed_hosts=list(settings.allowed_hosts),
         ),
