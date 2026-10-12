@@ -1,5 +1,31 @@
 # SPEC — Health Hub MCP Server (полная переписка с нуля)
 
+## Implementation target update (2026-10-12)
+
+The current user request extends the completed server to expose all 34 stored
+registry types through MCP. This update supersedes the historical 25-type,
+five-tool surface and fixed file list below for this extension. It does not
+restart the original implementation/deployment phases.
+
+The MCP server advertises `health-connect-mcp`. Add `list_data_types` for
+registry metadata and schemas, and `health_records` for explicit, typed,
+paginated access. Generate input enums and discriminated output models from
+the registry. Documented value fields have their actual units; fields without
+a defined contract remain JSON, including nested content, with caveats.
+
+Record queries require one type and inclusive local dates using configured
+timezone/day boundary. Instants use measurement time, sleep uses session end,
+and intervals intersect the half-open UTC window without clipping. Pages
+default to 100 records and have a maximum of 400. Query-bound cursors continue
+in chronological start-time/event-ID order. Invalid arguments are MCP errors.
+Missing fields remain unknown; records have content-hash deduplication and
+no suppression of overlapping sources. Bearer authentication applies to all
+MCP transport methods and tool calls. Verify every type using synthetic data.
+
+The extension adds `contract/values.py`, `mcp_server/schemas_records.py`,
+`mcp_server/records_query.py`, `mcp_server/tools_records.py`, and focused MCP
+test modules. Existing rollup tools cover their documented aggregate subset.
+
 Версия спеки: 2026-08-09. Это **единственный источник истины** по требованиям.
 Если код расходится со спекой — прав документ. Если реальность расходится со спекой — остановись и спроси.
 

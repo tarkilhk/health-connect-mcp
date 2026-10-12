@@ -68,7 +68,7 @@ class DailyRollup:
 
 
 def _parse_iso(s: str) -> datetime:
-    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    return datetime.fromisoformat(s)
 
 
 def _has_gap_gt_6h(events: list[Event]) -> bool:

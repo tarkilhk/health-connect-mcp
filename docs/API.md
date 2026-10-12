@@ -70,7 +70,7 @@ Receives a Health Connect payload from the companion app.
  "errors": [], "rollups_updated": ["2026-08-08", "2026-08-09"]}
 ```
 
-### The 25 health types
+### The 34 stored types
 
 | JSON key | Kind | Value field | Cumulative |
 |---|---|---|---|
@@ -99,6 +99,15 @@ Receives a Health Connect payload from the companion app.
 | `bone_mass` | INSTANT | `kilograms` | no |
 | `body_water_mass` | INSTANT | `kilograms` | no |
 | `menstruation_flow` | INSTANT | `flow` (`light`/`medium`/`heavy`/`unknown`) | no |
+| `skin_temperature` | INSTANT | `delta_celsius`; additional nested JSON is preserved | no |
+| `basal_metabolic_rate` | INSTANT | `watts` | no |
+| `vo2_max` | INSTANT | `ml_per_kg_per_min` | no |
+| `intermenstrual_bleeding` | INSTANT | Stored JSON; no value-field contract defined | no |
+| `basal_body_temperature` | INSTANT | Stored JSON; no value-field contract defined | no |
+| `cervical_mucus` | INSTANT | Stored JSON; no value-field contract defined | no |
+| `ovulation_test` | INSTANT | Stored JSON; no value-field contract defined | no |
+| `sexual_activity` | INSTANT | Stored JSON; no value-field contract defined | no |
+| `test` | INSTANT | Custom stored JSON; no Health Connect field contract defined | no |
 
 Sleep `stage` values: `unknown`, `awake`, `sleeping`, `out_of_bed`, `light`, `deep`, `rem`, `awake_in_bed`.
 
@@ -159,7 +168,51 @@ The `/debug/api/rollup/{date}` endpoint is the key tool for diagnosing double-co
 
 ## MCP tools
 
-All tools are invoked over the Streamable HTTP transport at `POST /mcp` with `Authorization: Bearer <MCP_TOKEN>`. Every response is an `object` with a `caveats: string[]` field. Responses are capped at 400 objects.
+All seven tools are invoked over the Streamable HTTP transport at `POST /mcp` with `Authorization: Bearer <MCP_TOKEN>`. Every response is an `object` with a `caveats: string[]` field. `health_records` enforces a maximum of 400 parent records per page; nested values belong to those records. Authentication also applies to GET and DELETE transport requests.
+
+### `list_data_types`
+
+No parameters. Returns a `data_types` array of all 34 registry entries. Each entry includes `data_type`, `kind` (`instant`, `interval`, `session`), `unit`, `value_field`, `cumulative`, a `value_schema` JSON Schema, and `caveats`. Registration does not imply that measurements have been synced. `health_records` advertises an input enum and a discriminated output schema covering the same types in MCP `tools/list`.
+
+Numeric value schemas annotate units per field. Steps use counts; distance and height use meters; calories use kcal; hydration uses liters; mass uses kg; heart rate uses bpm; HRV uses ms; blood pressure uses mmHg; glucose uses mmol/L; saturation and body fat use percent; respiration uses breaths/min; temperature uses °C; BMR uses W; VO2 max uses mL/(kg·min). Nutrition macros use grams and session durations use seconds. Skin temperature's `delta_celsius` is a change, not an absolute temperature. `category`, `bool`, `session`, and `unknown` are registry labels, not measurement units or inferred values. For entries without a documented value field, interpret only fields actually stored.
+
+### `health_records`
+
+Explicit record access for all 34 types. This tool reads normalized stored events; it does not read raw payload envelopes or compute new aggregates. Use `daily_summary` or `metric_series` for their documented rollup metrics.
+
+| Param | Type | Required | Notes |
+|---|---|---|---|
+| `data_type` | enum string | yes | One of the 34 registry keys above |
+| `date_from` | string | yes | Canonical `YYYY-MM-DD`, inclusive local start date |
+| `date_to` | string | yes | Canonical `YYYY-MM-DD`, inclusive local end date; must be >= start |
+| `limit` | integer | no | Default 100, minimum 1, maximum 400 |
+| `cursor` | string | no | Opaque `next_cursor` from the previous page |
+
+```json
+{"jsonrpc":"2.0","id":2,"method":"tools/call",
+ "params":{"name":"health_records","arguments":{"data_type":"blood_pressure","date_from":"2026-08-09","date_to":"2026-08-09"}}}
+```
+
+Example response, with the event hash shortened for display:
+
+```json
+{"data_type":"blood_pressure","date_from":"2026-08-09","date_to":"2026-08-09",
+ "timezone":"UTC","day_boundary_hour":0,
+ "window_start_utc":"2026-08-09T00:00:00+00:00","window_end_utc":"2026-08-10T00:00:00+00:00",
+ "records":[{"event_id":"abc...","data_type":"blood_pressure","kind":"instant",
+             "start_utc":"2026-08-09T08:00:00Z","end_utc":"2026-08-09T08:00:00Z",
+             "values":{"time":"2026-08-09T08:00:00Z","systolic":120,"diastolic":80}}],
+ "next_cursor":null,
+ "caveats":["Stored records are not daily aggregates; overlapping sources can double count."]}
+```
+
+The response reports `TIMEZONE`, `DAY_BOUNDARY_HOUR`, and the effective half-open UTC window `[window_start_utc, window_end_utc)`. Local days respect timezone changes, including daylight saving. Instants are selected by measurement time, sleep by session end. Intervals are included when they intersect the window; zero-duration intervals use instant attribution. Intervals remain whole, so a period spanning several days can appear in several separate daily queries. Values are never clipped or prorated.
+
+Pages are ordered by the actual start instant, then event hash, including records stored with timezone offsets. Pass `next_cursor` with the same type and dates to continue; changing the window or type invalidates the cursor. `next_cursor: null` means the page exhausted the query. Ingestion between calls can change later pages; this is not a snapshot export. Invalid types, limits, dates, and cursors return MCP tool errors.
+
+`values` preserves stored fields, including paired blood pressure readings, categories, optional nutrition components, sleep stages, and arbitrary nested JSON. Known fields are typed without converting strings into numbers. Missing nullable fields may appear as `null`; a stored zero or `false` remains distinct. Types without a value-field contract use JSON objects and carry a caveat. Sleep duration is time in bed, including awake stages; this tool does not infer time asleep from malformed or missing stages. Invalid stored values that fail their declared schema are skipped with an event-specific caveat. Pagination still advances past them.
+
+An empty `records` array means no stored records matched the window. It does not establish zero activity, absence of symptoms, or a negative test. Content-hash deduplication removes identical repeated deliveries; different overlapping source records remain separate and must not be naively summed. The response always includes caveats.
 
 ### `daily_summary`
 

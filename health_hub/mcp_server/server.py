@@ -26,16 +26,18 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 
+from health_hub.aggregate.timewindow import utc_sort_key
 from health_hub.config import Settings
 
-mcp: MCPServer = MCPServer("health-hub")
+mcp: MCPServer = MCPServer("health-connect-mcp")
 
 _db: aiosqlite.Connection | None = None
 
 
-def set_db(db: aiosqlite.Connection) -> None:
+async def set_db(db: aiosqlite.Connection) -> None:
     """Store the app-level DB connection for use by MCP tools."""
     global _db
+    await db.create_function("utc_instant", 1, utc_sort_key, deterministic=True)
     _db = db
 
 

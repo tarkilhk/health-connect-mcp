@@ -37,13 +37,13 @@ CI runs `ruff check .` and `pytest tests/ -v` on every push and pull request. Bo
 
 ## Adding a New Health Connect Type
 
-One line in `health_hub/contract/registry.py` plus a test. No other module changes needed.
+Add a `TypeSpec` in `health_hub/contract/registry.py` with a value model. Numeric fields use `scalar_values`; compound records use a model from `health_hub/contract/values.py`. Use `JsonValues` when no value-field contract is established, so stored fields remain available without inventing their meaning.
 
 ```python
-"new_type": TypeSpec("new_type", "new_type", RecordKind.INSTANT, "value_field", "unit", False),
+"new_type": TypeSpec("new_type", "new_type", RecordKind.INSTANT, "value_field", "unit", False, scalar_values("value_field", "unit")),
 ```
 
-The registry drives normalization, identity hashing, the debug coverage matrix, and `get_sync_health` automatically. Add a test in `tests/test_normalize.py` covering the new type, and a test in `tests/test_registry.py` confirming it is registered.
+The registry drives normalization, identity hashing, the debug coverage matrix, `get_sync_health`, `list_data_types`, and the `health_records` input enum and output schemas. Add normalization and registry tests, and include the type in the synthetic MCP round-trip fixture in `tests/test_mcp_records.py`. MCP tests use bearer authentication and an in-memory database. Date-dependent tests must control the clock.
 
 ## Pull Requests
 

@@ -1,6 +1,6 @@
-# Health Hub MCP Server
+# health-connect-mcp
 
-[![CI](https://github.com/USER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/USER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/tarkilhk/health-connect-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tarkilhk/health-connect-mcp/actions/workflows/ci.yml)
 
 Personal MCP server that ingests Health Connect data from an Android companion app and exposes aggregated health metrics to LLM clients over the Model Context Protocol.
 
@@ -12,7 +12,7 @@ Android 14+ ──POST /ingest/hc-webhook──▶ │   Health Hub     │─�
                    browser ──GET /debug──▶ └──────────────────┘
 ```
 
-The companion app reads raw records from Health Connect and pushes them to this server. The server normalizes, deduplicates, and rolls them up into daily aggregates, then exposes them to LLM clients (Claude, Perplexity, OpenCode) through five MCP tools. Raw events are never handed to the model by default — only rolled-up summaries with explicit `caveats` so the model cannot silently fabricate missing data.
+The companion app reads records from Health Connect and pushes them to this server. The server normalizes, deduplicates, and rolls them up into daily aggregates for LLM clients (Claude, Perplexity, OpenCode). Seven MCP tools provide summaries, diagnostics, and explicit access to all 34 stored data types. Use summaries for totals and `health_records` when individual measurements or nested records are needed. Every response includes `caveats` about missing data and interpretation.
 
 ## Requirements
 - Android 14+ with [life-dashboard-companion-app](https://github.com/owen282000/life-dashboard-companion-app) v1.4.0+
@@ -52,7 +52,7 @@ Add to Claude Desktop config (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
-    "health-hub": {
+    "health-connect-mcp": {
       "url": "https://your-domain.example.com/mcp",
       "headers": {"Authorization": "Bearer <YOUR_MCP_TOKEN>"}
     }
@@ -66,12 +66,22 @@ For Perplexity, OpenCode, or other MCP clients, use the same URL and token. The 
 | Tool | Description |
 |---|---|
 | `daily_summary` | Daily health rollups: steps, distance, calories, sleep, HR, weight |
-| `metric_series` | Time series for any metric with day/week bucketing |
+| `metric_series` | Time series for the 11 documented rollup metrics with day/week bucketing |
 | `sleep_detail` | Detailed sleep sessions with stages (deep, REM, light, awake) |
 | `get_sync_health` | Per-type sync status: last event, coverage, gaps, errors |
 | `inspect_last_payload` | Raw payload metadata and app diagnostics |
+| `list_data_types` | Discover all 34 stored types, units, record kinds and value schemas |
+| `health_records` | Typed records for one selected type and local date window, with pagination |
 
-Each tool returns an `object` (never a bare array) with a `caveats: string[]` field that warns the model about missing days, overlapping records, or aggregation changes. Responses are capped at 400 objects.
+Each tool returns an `object` (never a bare array) with a `caveats: string[]` field. `health_records` returns 100 records by default and accepts a limit from 1 to 400. Continue with `next_cursor` using the same type and dates. Paired blood pressure values, optional nutrition fields, categories, sleep stages and other nested JSON are preserved. Records have content-hash deduplication; overlapping source records have no suppression in this tool, so summing them may overcount.
+
+Start with `list_data_types`, then call, for example:
+
+```json
+{"name":"health_records","arguments":{"data_type":"blood_pressure","date_from":"2026-08-01","date_to":"2026-08-09","limit":100}}
+```
+
+Dates use `TIMEZONE` and `DAY_BOUNDARY_HOUR`. Sleep is selected by session end, instants by measurement time, and intervals by intersection with the window. Missing measurements mean unknown. Some registry entries have no defined value-field contract, including the custom `test` type; their stored JSON is returned with a caveat. See [docs/API.md](docs/API.md) for all 34 types and the query contract.
 
 ## Known Limitations
 - No record IDs from Health Connect — deduplication is content-hash based

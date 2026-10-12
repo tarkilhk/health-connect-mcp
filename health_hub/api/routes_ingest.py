@@ -23,9 +23,16 @@ from starlette.routing import Route
 
 from health_hub.aggregate.timewindow import local_date_of
 from health_hub.api.auth import verify_signature, verify_token
-from health_hub.contract.payload import HCWebhookPayload, HealthPayload, ScreenTimePayload
+from health_hub.contract.payload import (
+    HCWebhookPayload,
+    HealthPayload,
+    ScreenTimePayload,
+)
 from health_hub.ingest.diagnostics import store_diagnostics
-from health_hub.ingest.normalize import normalize_health_payload, normalize_hc_webhook_payload
+from health_hub.ingest.normalize import (
+    normalize_hc_webhook_payload,
+    normalize_health_payload,
+)
 from health_hub.ingest.raw_store import store_raw_payload
 from health_hub.ingest.writer import (
     upsert_events,

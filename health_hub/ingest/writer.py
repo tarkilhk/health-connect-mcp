@@ -11,7 +11,7 @@ can be wrapped in a single atomic transaction by the route handler.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -32,7 +32,7 @@ async def upsert_events(
     """
     stored = 0
     duplicates = 0
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     for evt in events:
         eid = event_id(evt.data_type, evt.start_utc, evt.end_utc, evt.value_json)
@@ -104,7 +104,7 @@ async def upsert_screen_time(
 
     Does NOT commit — caller manages the transaction.
     """
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     days_written = 0
 
     for day in screen_time_data:

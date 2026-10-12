@@ -12,6 +12,8 @@ os.environ.setdefault("DEVICE_TOKEN", "test-device-token")
 os.environ.setdefault("MCP_TOKEN", "test-mcp-token")
 os.environ.setdefault("ALLOWED_HOSTS", "localhost,localhost:*")
 
+pytest_plugins = ["tests.mcp_client"]
+
 
 @pytest.fixture
 def memory_db() -> Iterator[sqlite3.Connection]:

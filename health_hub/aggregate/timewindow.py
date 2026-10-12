@@ -9,13 +9,28 @@ to the previous calendar date.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 
 def _parse_iso(s: str) -> datetime:
     """Parse ISO8601 with optional trailing Z into a timezone-aware datetime."""
-    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    return datetime.fromisoformat(s)
+
+
+def utc_sort_key(instant: str) -> str | None:
+    """Canonical UTC microsecond key for comparisons without SQLite rounding.
+
+    Invalid or timezone-free timestamps have no absolute instant and are
+    excluded from time-window queries.
+    """
+    try:
+        dt = datetime.fromisoformat(instant)
+        if dt.utcoffset() is None:
+            return None
+        return dt.astimezone(UTC).isoformat(timespec="microseconds")
+    except (ValueError, TypeError, OverflowError):
+        return None
 
 
 def local_date_of(instant_utc: str, tz: str = "UTC", day_boundary_hour: int = 0) -> str:
@@ -42,6 +57,6 @@ def day_bounds_utc(local_date: str, tz: str = "UTC", day_boundary_hour: int = 0)
         d.year, d.month, d.day, day_boundary_hour, 0, 0, tzinfo=ZoneInfo(tz)
     )
     local_end = local_start + timedelta(days=1)
-    start_utc = local_start.astimezone(timezone.utc)
-    end_utc = local_end.astimezone(timezone.utc)
+    start_utc = local_start.astimezone(UTC)
+    end_utc = local_end.astimezone(UTC)
     return (start_utc.isoformat(), end_utc.isoformat())

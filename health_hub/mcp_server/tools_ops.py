@@ -7,7 +7,7 @@ raw payload.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from health_hub.contract.registry import TYPE_REGISTRY
 from health_hub.mcp_server.server import get_db, mcp
@@ -24,7 +24,7 @@ async def get_sync_health(days: int = 30) -> dict:
     if days < 1:
         return {"metrics": [], "period_days": 0, "caveats": ["days must be >= 1"]}
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     period_start = now - timedelta(days=days)
     period_start_iso = period_start.strftime("%Y-%m-%dT%H:%M:%SZ")
 

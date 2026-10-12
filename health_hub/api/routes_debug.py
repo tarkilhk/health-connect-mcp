@@ -12,7 +12,7 @@ from __future__ import annotations
 import hmac
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import aiosqlite
@@ -273,7 +273,7 @@ async def get_coverage(request: Request) -> JSONResponse:
     db: aiosqlite.Connection = request.app.state.db
     days = _get_int_param(request, "days", default=30, min_val=1, max_val=365)
 
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     day_list = [(today - timedelta(days=i)).isoformat() for i in range(days)]
     types = list(TYPE_REGISTRY.keys())
 

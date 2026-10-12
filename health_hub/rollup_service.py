@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -97,7 +97,7 @@ async def recalc_rollups_for_dates(
     Does NOT commit — the caller manages the transaction.
     """
     done: list[str] = []
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     for local_date in local_dates:
         done.append(await _recalc_one(db, local_date, tz, day_boundary_hour, now))

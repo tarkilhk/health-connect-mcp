@@ -9,7 +9,7 @@ in the errors list; valid records survive. Each error dict has keys:
 type (str), index (int), error (str).
 """
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from health_hub.contract.kinds import RecordKind
 from health_hub.contract.payload import Event
@@ -184,7 +184,7 @@ def _normalize_sleep(
 
 def _parse_iso(s: str) -> datetime:
     """Parse ISO8601 with optional trailing Z into a timezone-aware datetime."""
-    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    return datetime.fromisoformat(s)
 
 
 def _format_iso(dt: datetime) -> str:
@@ -193,8 +193,8 @@ def _format_iso(dt: datetime) -> str:
     Preserves microseconds when present.
     """
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    dt = dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
+    dt = dt.astimezone(UTC)
     if dt.microsecond:
         return dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")

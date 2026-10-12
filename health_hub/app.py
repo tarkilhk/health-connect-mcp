@@ -19,7 +19,7 @@ from health_hub.db.migrations import apply_migrations
 from health_hub.logging_setup import configure_logging
 
 # Import tool modules to register @mcp.tool() decorators at import time.
-from health_hub.mcp_server import tools_ops, tools_sleep, tools_summary  # noqa: F401
+from health_hub.mcp_server import tools_ops, tools_records, tools_sleep, tools_summary  # noqa: F401
 from health_hub.mcp_server.server import create_mcp_app, mcp_lifespan, set_db
 
 log = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ async def lifespan(app: Starlette) -> AsyncIterator[None]:
     app.state.db = db
     # Expose the DB to MCP tools via the module-level accessor (SPEC §9.3.3:
     # single worker, so one process-wide connection is safe).
-    set_db(db)
+    await set_db(db)
     try:
         # Run the MCP session manager inside the DB lifespan so both are
         # alive for the duration of the app (SPEC §9.3.2: the built-in

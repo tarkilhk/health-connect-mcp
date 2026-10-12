@@ -6,7 +6,7 @@ caller may later UPDATE the row with ``parse_error`` or envelope metadata
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import aiosqlite
 
@@ -27,7 +27,7 @@ async def store_raw_payload(
     ``body_json`` decodes the body as UTF-8 with a latin-1 fallback so even
     binary payloads are preserved losslessly.
     """
-    received_at = datetime.now(timezone.utc).isoformat()
+    received_at = datetime.now(UTC).isoformat()
     byte_size = len(raw_body)
     body_json = _decode_body(raw_body)
 

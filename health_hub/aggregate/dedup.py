@@ -14,7 +14,7 @@ from health_hub.contract.payload import Event
 
 
 def _parse_iso(s: str) -> datetime:
-    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    return datetime.fromisoformat(s)
 
 
 def sum_non_overlapping(events: list[Event]) -> tuple[float, bool]:

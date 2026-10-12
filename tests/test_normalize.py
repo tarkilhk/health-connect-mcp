@@ -20,7 +20,7 @@ def _count_input_records(payload):
 
 
 def _parse_iso(s):
-    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    return datetime.fromisoformat(s)
 
 
 def test_full_payload_event_count_matches_input():
