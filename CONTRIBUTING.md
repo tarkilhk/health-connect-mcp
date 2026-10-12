@@ -16,7 +16,7 @@ cp .env.example .env
 pytest tests/ -v
 ```
 
-The suite is fully async (`pytest-asyncio`, `auto` mode) and uses `httpx` for route tests. No external services are required — tests use an in-memory or temp-file SQLite database.
+The suite is fully async (`pytest-asyncio`, `auto` mode) and uses `httpx` for route tests. No external services are required — integration tests use temporary SQLite files with isolated read and write connections.
 
 The server uses MCP Python SDK 2.3 or later within the 2.x series. `tests/test_mcp_modern.py` verifies protocol revision `2026-07-28` directly, with per-request metadata and no initialization handshake or session IDs.
 
@@ -45,7 +45,7 @@ Add a `TypeSpec` in `health_hub/contract/registry.py` with a value model. Numeri
 "new_type": TypeSpec("new_type", "new_type", RecordKind.INSTANT, "value_field", "unit", False, scalar_values("value_field", "unit")),
 ```
 
-The registry drives normalization, identity hashing, the debug coverage matrix, `get_sync_health`, `list_data_types`, and the `health_records` input enum and output schemas. Add normalization and registry tests, and include the type in the synthetic MCP round-trip fixture in `tests/test_mcp_records.py`. MCP tests use bearer authentication and an in-memory database. Date-dependent tests must control the clock.
+The registry drives normalization, identity hashing, the debug coverage matrix, `get_sync_health`, `list_data_types`, and the `health_records` input enum and output schemas. Add normalization and registry tests, and include the type in the synthetic MCP round-trip fixture in `tests/test_mcp_records.py`. MCP tests use bearer authentication and a temporary-file database. Date-dependent tests must control the clock.
 
 ## Pull Requests
 

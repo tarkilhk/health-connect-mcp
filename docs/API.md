@@ -158,15 +158,19 @@ All require `?token=<MCP_TOKEN>`. Missing or wrong token → `401` with no body.
 | `GET /debug/api/payloads?limit=20` | Recent payloads: id, time, source, app_version, size, `signature_valid`, event count, parse error |
 | `GET /debug/api/payload/{id}` | Full raw body + parsed events + sleep stages + result counts |
 | `GET /debug/api/diagnostics?payload_id=N` | The `_diagnostics` block for one payload, per type |
-| `GET /debug/api/coverage?days=30` | Day × type matrix of event counts |
+| `GET /debug/api/coverage?days=30` | Day × type matrix using configured local dates and sleep session ends |
 | `GET /debug/api/rollup/{local_date}` | Daily rollup + **naive sums** (pre-dedup) side by side |
 | `GET /debug/api/stats` | Total events, type counts, date range, last ingest time |
 
 The `/debug/api/rollup/{date}` endpoint is the key tool for diagnosing double-counting: it shows the naive sum of all records next to the deduplicated rollup. Their ratio measures source overlap.
 
+Payload list limits accept 1–100 and coverage accepts 1–365 days. Invalid integers, out-of-range values and dates outside canonical `YYYY-MM-DD` return 400. Diagnostic permissions are booleans or null.
+
 ---
 
 ## MCP tools
+
+`health_records` is the primary data interface. Summary and sleep-detail totals are additional derived views; they do not replace or rewrite stored records. MCP and debug reads use a query-only connection and never expose uncommitted ingestion writes.
 
 All seven tools use Streamable HTTP at `POST /mcp` with MCP protocol revision `2026-07-28`. Every tool response is an `object` with a `caveats: string[]` field. `health_records` enforces a maximum of 400 parent records per page; nested values belong to those records.
 
@@ -234,7 +238,7 @@ An empty `records` array means no stored records matched the window. It does not
 
 ### `daily_summary`
 
-Daily rollups for a date range.
+Additional derived daily rollups for up to 400 inclusive local dates. Use `health_records` for individual stored measurements.
 
 **Params:**
 | Param | Type | Required | Notes |
@@ -257,7 +261,7 @@ Daily rollups for a date range.
  "caveats":["partial coverage for 2026-08-01: missing distance_m, active_kcal, ..."]}
 ```
 
-Available metrics: `steps`, `distance_m`, `active_kcal`, `total_kcal`, `sleep_in_bed_s`, `sleep_asleep_s`, `hr_avg`, `hr_min`, `hr_max`, `hr_resting`, `weight_kg`. Days with no data return `null` fields (never `0`).
+Available metrics: `steps`, `distance_m`, `active_kcal`, `total_kcal`, `sleep_in_bed_s`, `sleep_asleep_s`, `hr_avg`, `hr_min`, `hr_max`, `hr_resting`, `weight_kg`. Missing daily metrics are omitted and their coverage is `absent`; present metrics can have `partial` recorded coverage. Missing series points have `value: null`. Unknown metric names return MCP errors. An explicit empty `metrics` list returns only dates.
 
 ### `metric_series`
 
@@ -278,7 +282,7 @@ Time series for one metric with day/week bucketing.
  "caveats":["data present for all days in range"]}
 ```
 
-If a range exceeds 400 days with `bucket="day"`, the tool switches to weekly buckets and notes it in `caveats`. Weekly buckets start on Monday; cumulative metrics are summed, non-cumulative metrics are averaged.
+Requests exceeding 400 output buckets return an MCP error. To query a longer range, explicitly choose `bucket="week"`; the server never changes the requested bucket. Weekly buckets start on Monday; cumulative daily metrics are summed and other daily metrics are averaged. A week with no recorded values remains `null`; partially recorded weeks aggregate the available values and report missing daily coverage in `caveats`.
 
 ### `sleep_detail`
 
@@ -298,20 +302,20 @@ Detailed sleep sessions with stages. Sessions are attributed by `end_utc` (a ses
  "caveats":["all sessions have stage data"]}
 ```
 
-`time_in_bed_s` includes `awake` and `awake_in_bed` stages; `time_asleep_s` excludes them.
+`time_in_bed_s` is the full session duration. `time_asleep_s` sums `sleeping`, `light`, `deep`, and `rem`; it excludes `awake`, `awake_in_bed`, and `out_of_bed`. Detail and rollups share this calculation. Missing or unknown stages, overlaps, gaps, or inconsistent stage durations leave time asleep unknown (`null` in detail, omitted in daily metrics), with a caveat. At most 400 sessions are returned; a truncation caveat directs callers to paginated `health_records`. Stored session values and nested stages remain unchanged.
 
 ### `get_sync_health`
 
-Per-type sync status for the last N days.
+Per-type sync status for the last N UTC calendar days, including today.
 
 **Params:**
 | Param | Type | Required | Notes |
 |---|---|---|---|
-| `days` | int | no | Default 30 |
+| `days` | int | no | Default 30, minimum 1, maximum 365 |
 
 **Example response (abridged):**
 ```json
-{"metrics":[{"data_type":"steps","last_event_utc":"2026-08-09T...","coverage_days":9,"missing_days":0,"last_error":null}],
+{"metrics":[{"data_type":"steps","last_event_utc":"2026-08-09T...","coverage_days":9,"missing_days":21,"last_error":null}],
  "period_days":30,
  "caveats":["steps: missing 21 of 30 days"]}
 ```

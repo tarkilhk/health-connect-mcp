@@ -1,6 +1,6 @@
 """Integration tests for the debug inspector endpoints.
 
-Uses httpx.ASGITransport against a Starlette app backed by an in-memory
+Uses httpx.ASGITransport against a Starlette app backed by an temporary-file
 SQLite database. Ingests a health payload first, then queries debug
 endpoints to verify data appears.
 """
@@ -10,7 +10,6 @@ import hashlib
 import hmac
 from pathlib import Path
 
-import aiosqlite
 import httpx
 import pytest
 from starlette.applications import Starlette
@@ -19,7 +18,7 @@ from health_hub.api.routes_debug import routes as debug_routes
 from health_hub.api.routes_health import routes as health_routes
 from health_hub.api.routes_ingest import routes as ingest_routes
 from health_hub.config import Settings
-from health_hub.db.migrations import apply_migrations
+from health_hub.db.store import Database
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DEVICE_TOKEN = "test-device-token"
@@ -48,29 +47,29 @@ def _token_qs() -> dict:
 
 
 @pytest.fixture
-async def test_app():
-    """Starlette app with in-memory DB and all routes mounted."""
+async def test_app(tmp_path):
+    """Starlette app with temporary-file DB and all routes mounted."""
     settings = Settings(
         device_token=DEVICE_TOKEN,
         mcp_token=MCP_TOKEN,
         allowed_hosts=["localhost", "localhost:*"],
         signing_key=SIGNING_SECRET,
-        database_path=":memory:",
+        database_path=str(tmp_path / "synthetic.sqlite3"),
         timezone="UTC",
         day_boundary_hour=0,
         log_level="ERROR",
         port=8000,
     )
-    db = await aiosqlite.connect(":memory:")
-    db.row_factory = aiosqlite.Row
-    await apply_migrations(db)
+    database = await Database.open(settings)
+    db = database.reader
     app = Starlette(routes=health_routes + ingest_routes + debug_routes)
     app.state.settings = settings
     app.state.db = db
+    app.state.database = database
     try:
         yield app
     finally:
-        await db.close()
+        await database.close()
 
 
 @pytest.fixture
@@ -287,7 +286,7 @@ async def test_rollup_no_data_returns_null(client):
 async def test_rollup_with_data_returns_rollup(ingested_client, test_app):
     # Insert a rollup row manually (INSERT OR REPLACE — ingest may have
     # already created a row for this date via recalc).
-    db = test_app.state.db
+    db = test_app.state.database._writer
     await db.execute(
         """INSERT OR REPLACE INTO daily_rollups
            (local_date, steps, distance_m, active_kcal, total_kcal,

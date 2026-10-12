@@ -1,4 +1,5 @@
 """Integration tests for authenticated MCP summaries and discovery."""
+from health_hub import __version__
 from tests.mcp_client import (
     _auth_headers,
     _call_tool,
@@ -18,7 +19,7 @@ async def test_discovery_stamps_server_info(client):
     result = (await _mcp_call(client, "server/discover"))["result"]
     info = result["_meta"]["io.modelcontextprotocol/serverInfo"]
     assert info["name"] == "health-connect-mcp"
-    assert info["version"] == "0.2.0"
+    assert info["version"] == __version__
 
 
 # --- tools/list -------------------------------------------------------------
@@ -102,11 +103,12 @@ async def test_metric_series_returns_points(client, db):
 
 
 async def test_metric_series_unknown_metric(client):
-    result = await _call_tool(client, "metric_series",
-                              {"metric": "nonexistent", "date_from": "2026-08-09",
-                               "date_to": "2026-08-09"})
-    assert result["points"] == []
-    assert any("unknown metric" in c for c in result["caveats"])
+    response = await _mcp_call(client, "tools/call", {
+        "name": "metric_series", "arguments": {
+            "metric": "nonexistent", "date_from": "2026-08-09", "date_to": "2026-08-09",
+        },
+    })
+    assert response["result"]["isError"] is True
 
 
 # --- sleep_detail -----------------------------------------------------------

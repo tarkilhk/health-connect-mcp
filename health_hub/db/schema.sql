@@ -1,4 +1,4 @@
--- Health Hub database schema. Idempotent: every object uses IF NOT EXISTS.
+-- Health Hub database schema. Idempotent DDL.
 -- See SPEC section 5.1.
 
 CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS raw_payloads (
   body_json         TEXT NOT NULL,
   parse_error       TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_raw_received ON raw_payloads(received_at DESC);
+DROP INDEX IF EXISTS idx_raw_received;
 
 -- L0b: parsed _diagnostics block.
 CREATE TABLE IF NOT EXISTS sync_diagnostics (
@@ -45,8 +45,15 @@ CREATE TABLE IF NOT EXISTS events (
   payload_id    INTEGER NOT NULL REFERENCES raw_payloads(id),
   first_seen_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_events_type_start ON events(data_type, start_utc);
-CREATE INDEX IF NOT EXISTS idx_events_start ON events(start_utc);
+DROP INDEX IF EXISTS idx_events_type_start;
+DROP INDEX IF EXISTS idx_events_start;
+CREATE INDEX IF NOT EXISTS idx_events_payload ON events(payload_id);
+CREATE INDEX IF NOT EXISTS idx_events_type_instant_start
+  ON events(data_type, utc_instant(start_utc), event_id);
+CREATE INDEX IF NOT EXISTS idx_events_type_instant_end
+  ON events(data_type, utc_instant(end_utc), event_id);
+CREATE INDEX IF NOT EXISTS idx_events_instant_start
+  ON events(utc_instant(start_utc), data_type, event_id);
 
 CREATE TABLE IF NOT EXISTS sleep_stages (
   session_event_id TEXT NOT NULL REFERENCES events(event_id),

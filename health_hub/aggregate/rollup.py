@@ -19,7 +19,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from health_hub.aggregate.dedup import sum_non_overlapping
+from health_hub.aggregate.sleep import sleep_totals
 from health_hub.contract.payload import Event
+from health_hub.ingest.identity import event_id
 
 # Cumulative types that map to a DailyRollup field.
 # (hydration / nutrition are cumulative but have no rollup field today.)
@@ -41,8 +43,6 @@ _COVERAGE_METRICS: tuple[str, ...] = (
     "resting_heart_rate",
     "weight",
 )
-
-_AWAKE_STAGES = frozenset({"awake", "awake_in_bed"})
 
 _GAP_THRESHOLD = timedelta(hours=6)
 
@@ -82,7 +82,7 @@ def _has_gap_gt_6h(events: list[Event]) -> bool:
     """
     if len(events) < 2:
         return False
-    sorted_ev = sorted(events, key=lambda e: e.start_utc)
+    sorted_ev = sorted(events, key=lambda e: _parse_iso(e.start_utc))
     max_end = _parse_iso(sorted_ev[0].end_utc)
     for i in range(1, len(sorted_ev)):
         next_start = _parse_iso(sorted_ev[i].start_utc)
@@ -131,47 +131,46 @@ def compute_rollup(
         if overlap:
             rollup.has_overlap = True
 
-    # heart_rate: avg / min / max from value_num.
-    hr_events = by_type.get("heart_rate", [])
-    hr_vals = [e.value_num for e in hr_events if e.value_num is not None]
-    if hr_vals:
-        rollup.hr_avg = sum(hr_vals) / len(hr_vals)
-        rollup.hr_min = int(min(hr_vals))
-        rollup.hr_max = int(max(hr_vals))
+    _apply_instant_metrics(rollup, by_type)
 
-    # resting_heart_rate: LAST value of the day.
-    rhr_events = by_type.get("resting_heart_rate", [])
-    if rhr_events:
-        last = max(rhr_events, key=lambda e: e.start_utc)
-        if last.value_num is not None:
-            rollup.hr_resting = int(last.value_num)
-
-    # weight: LAST measurement of the day.
-    weight_events = by_type.get("weight", [])
-    if weight_events:
-        last = max(weight_events, key=lambda e: e.start_utc)
-        if last.value_num is not None:
-            rollup.weight_kg = float(last.value_num)
-
-    # Sleep: caller guarantees every sleep event ends on local_date.
-    # sleep_in_bed_s = sum(end - start). sleep_asleep_s = in_bed - awake stages.
-    sleep_events = by_type.get("sleep", [])
-    if sleep_events:
-        in_bed = 0
-        for e in sleep_events:
-            s = _parse_iso(e.start_utc)
-            en = _parse_iso(e.end_utc)
-            in_bed += int((en - s).total_seconds())
-        rollup.sleep_in_bed_s = in_bed
-        awake_s = sum(
-            int(st.get("seconds", 0))
-            for st in stages
-            if st.get("stage") in _AWAKE_STAGES
-        )
-        rollup.sleep_asleep_s = max(0, in_bed - awake_s)
+    _apply_sleep(rollup, by_type.get("sleep", []), stages)
 
     # coverage_json per metric.
     for metric in _COVERAGE_METRICS:
         rollup.coverage_json[metric] = _coverage(by_type.get(metric, []))
+    if rollup.sleep_in_bed_s is not None and rollup.sleep_asleep_s is None:
+        rollup.coverage_json["sleep"] = "partial"
 
     return rollup
+
+
+def _apply_sleep(rollup: DailyRollup, events: list[Event], stages: list[dict]) -> None:
+    if not events:
+        return
+    by_session: dict[str, list[dict]] = {}
+    for stage in stages:
+        by_session.setdefault(stage["session_event_id"], []).append(stage)
+    totals = []
+    for event in events:
+        session_id = event_id(event.data_type, event.start_utc, event.end_utc, event.value_json)
+        totals.append(sleep_totals(event.start_utc, event.end_utc, by_session.get(session_id, [])))
+    rollup.sleep_in_bed_s = sum(in_bed for in_bed, _ in totals)
+    if all(asleep is not None for _, asleep in totals):
+        rollup.sleep_asleep_s = sum(asleep for _, asleep in totals if asleep is not None)
+
+
+def _apply_instant_metrics(rollup: DailyRollup, by_type: dict[str, list[Event]]) -> None:
+    heart_values = [
+        event.value_num for event in by_type.get("heart_rate", []) if event.value_num is not None
+    ]
+    if heart_values:
+        rollup.hr_avg = sum(heart_values) / len(heart_values)
+        rollup.hr_min, rollup.hr_max = int(min(heart_values)), int(max(heart_values))
+    for data_type, field_name, convert in [
+        ("resting_heart_rate", "hr_resting", int), ("weight", "weight_kg", float),
+    ]:
+        events = by_type.get(data_type, [])
+        if events:
+            last = max(events, key=lambda event: _parse_iso(event.start_utc))
+            if last.value_num is not None:
+                setattr(rollup, field_name, convert(last.value_num))

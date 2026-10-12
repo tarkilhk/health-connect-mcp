@@ -109,7 +109,6 @@ def _normalize_interval(spec: TypeSpec, rec: dict) -> Event:
         end_utc=rec["end_time"],
         value_num=_value_num(spec, rec),
         value_json=_canonical_json(rec),
-        stages=None,
     )
 
 
@@ -122,7 +121,6 @@ def _normalize_instant(spec: TypeSpec, rec: dict) -> Event:
         end_utc=instant,
         value_num=_value_num(spec, rec),
         value_json=_canonical_json(rec),
-        stages=None,
     )
 
 
@@ -149,7 +147,6 @@ def _normalize_sleep(
         end_utc=end_utc,
         value_num=None,
         value_json=value_json,
-        stages=None,
     )
 
     sess_id = event_id(spec.data_type, start_utc, end_utc, value_json)
@@ -157,19 +154,7 @@ def _normalize_sleep(
     stage_errors: list[dict] = []
     for stage_idx, stage in enumerate(rec.get("stages") or []):
         try:
-            if not isinstance(stage, dict):
-                raise TypeError(
-                    f"stage is {type(stage).__name__}, expected dict"
-                )
-            sess_stages.append(
-                {
-                    "session_event_id": sess_id,
-                    "stage": stage["stage"],
-                    "start_utc": stage["start_time"],
-                    "end_utc": stage["end_time"],
-                    "seconds": stage["duration_seconds"],
-                }
-            )
+            sess_stages.append(_stage_record(stage, sess_id))
         except (KeyError, TypeError) as exc:
             stage_errors.append(
                 {
@@ -198,3 +183,11 @@ def _format_iso(dt: datetime) -> str:
     if dt.microsecond:
         return dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _stage_record(stage: dict, session_id: str) -> dict:
+    if not isinstance(stage, dict):
+        raise TypeError(f"stage is {type(stage).__name__}, expected dict")
+    return {"session_event_id": session_id, "stage": stage["stage"],
+            "start_utc": stage["start_time"], "end_utc": stage["end_time"],
+            "seconds": stage["duration_seconds"]}

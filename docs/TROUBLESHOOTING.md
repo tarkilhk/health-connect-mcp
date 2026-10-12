@@ -63,7 +63,7 @@ Symptom → where to look → what to do.
 
 4. **`Authorization` header.** The client must send `Authorization: Bearer <MCP_TOKEN>` (with the `Bearer ` prefix). A bare token returns `401`. Check the client's config.
 
-Keep the single-worker setting enforced by `__main__.py`; it matches the application's SQLite connection model. The current MCP transport itself has no session affinity requirement.
+Keep the single-worker setting enforced by `__main__.py`; ingestion writes are serialized within the process, with a separate query-only reader. The current MCP transport itself has no session affinity requirement.
 
 ## 401 on /debug
 

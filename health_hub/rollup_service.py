@@ -17,7 +17,6 @@ window, while all other types are queried by ``start_utc``.
 from __future__ import annotations
 
 import json
-import logging
 from datetime import UTC, datetime
 
 import aiosqlite
@@ -25,29 +24,8 @@ import aiosqlite
 from health_hub.aggregate.rollup import compute_rollup
 from health_hub.aggregate.timewindow import day_bounds_utc
 from health_hub.contract.payload import Event
-
-log = logging.getLogger(__name__)
-
-# Non-sleep events: attributed by start_utc.
-_EVENTS_NON_SLEEP_SQL = (
-    "SELECT event_id, data_type, start_utc, end_utc, value_num, value_json "
-    "FROM events WHERE data_type != 'sleep' AND start_utc >= ? AND start_utc < ?"
-)
-
-# Sleep events: attributed by end_utc per SPEC §7.3.
-_EVENTS_SLEEP_SQL = (
-    "SELECT event_id, data_type, start_utc, end_utc, value_num, value_json "
-    "FROM events WHERE data_type = 'sleep' AND end_utc >= ? AND end_utc < ?"
-)
-
-# Sleep stages for sessions whose end_utc falls in the window.
-_STAGES_SQL = (
-    "SELECT session_event_id, stage, start_utc, end_utc, seconds "
-    "FROM sleep_stages WHERE session_event_id IN ("
-    "  SELECT event_id FROM events"
-    "  WHERE data_type='sleep' AND end_utc >= ? AND end_utc < ?"
-    ")"
-)
+from health_hub.db.events import load_attributed_events
+from health_hub.db.sleep import load_sleep_stages
 
 _UPSERT_SQL = (
     "INSERT INTO daily_rollups"
@@ -118,49 +96,7 @@ async def _recalc_one(
     """
     start_utc, end_utc = day_bounds_utc(local_date, tz, day_boundary_hour)
 
-    events: list[Event] = []
-
-    # Non-sleep events: attributed by start_utc.
-    cursor = await db.execute(_EVENTS_NON_SLEEP_SQL, (start_utc, end_utc))
-    rows = await cursor.fetchall()
-    for row in rows:
-        events.append(
-            Event(
-                data_type=row[1],
-                start_utc=row[2],
-                end_utc=row[3],
-                value_num=row[4],
-                value_json=row[5],
-            )
-        )
-
-    # Sleep events: attributed by end_utc (SPEC §7.3).
-    cursor = await db.execute(_EVENTS_SLEEP_SQL, (start_utc, end_utc))
-    rows = await cursor.fetchall()
-    for row in rows:
-        events.append(
-            Event(
-                data_type=row[1],
-                start_utc=row[2],
-                end_utc=row[3],
-                value_num=row[4],
-                value_json=row[5],
-            )
-        )
-
-    stages: list[dict] = []
-    cursor = await db.execute(_STAGES_SQL, (start_utc, end_utc))
-    stage_rows = await cursor.fetchall()
-    for row in stage_rows:
-        stages.append(
-            {
-                "session_event_id": row[0],
-                "stage": row[1],
-                "start_utc": row[2],
-                "end_utc": row[3],
-                "seconds": row[4],
-            }
-        )
+    events, stages = await _load_day(db, (start_utc, end_utc))
 
     rollup = compute_rollup(local_date, events, stages)
 
@@ -188,3 +124,14 @@ async def _recalc_one(
     )
 
     return local_date
+
+
+async def _load_day(db: aiosqlite.Connection, window: tuple[str, str]) -> tuple[list[Event], list[dict]]:
+    rows = await load_attributed_events(db, window)
+    sleep_rows = [row for row in rows if row["data_type"] == "sleep"]
+    events = [Event(data_type=row[1], start_utc=row[2], end_utc=row[3],
+                    value_num=row[4], value_json=row[5]) for row in rows]
+    by_session = await load_sleep_stages(db, [row[0] for row in sleep_rows])
+    stages = [{"session_event_id": event_id, **stage}
+              for event_id, session in by_session.items() for stage in session]
+    return events, stages

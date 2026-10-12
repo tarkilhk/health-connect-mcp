@@ -2,12 +2,13 @@
 import json
 from typing import Annotated
 
-from pydantic import Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from health_hub.config import load_settings
-from health_hub.contract.registry import TYPE_REGISTRY
+from health_hub.contract.registry import TYPE_REGISTRY, TypeSpec
 from health_hub.contract.values import JsonValues
 from health_hub.mcp_server.records_query import (
+    RecordRow,
     decode_cursor,
     encode_cursor,
     load_record_page,
@@ -23,7 +24,7 @@ from health_hub.mcp_server.schemas_records import (
 from health_hub.mcp_server.server import mcp
 
 
-def _type_caveats(spec) -> list[str]:
+def _type_caveats(spec: TypeSpec) -> list[str]:
     caveats = ["Stored records are not daily aggregates; overlapping sources can double count."]
     if spec.values_model is JsonValues:
         caveats.append("No value-field contract is defined; interpret only the stored JSON fields.")
@@ -91,7 +92,7 @@ async def health_records(
     )
 
 
-def _parse_records(rows, spec, caveats):
+def _parse_records(rows: list[RecordRow], spec: TypeSpec, caveats: list[str]) -> list[BaseModel]:
     records = []
     for event_id, start, end, stored_json in rows:
         try:

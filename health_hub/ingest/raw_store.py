@@ -52,6 +52,20 @@ async def store_raw_payload(
     return cursor.lastrowid
 
 
+async def mark_parse_error(db: aiosqlite.Connection, payload_id: int, error: str) -> None:
+    await db.execute("UPDATE raw_payloads SET parse_error = ? WHERE id = ?", (error, payload_id))
+    await db.commit()
+
+
+async def enrich_raw_payload(db: aiosqlite.Connection, payload_id: int, payload: dict) -> None:
+    """Copy validated envelope metadata before starting normalized writes."""
+    await db.execute(
+        "UPDATE raw_payloads SET app_version = ?, device = ?, payload_timestamp = ? WHERE id = ?",
+        (payload.get("app_version"), payload.get("device"), payload.get("timestamp"), payload_id),
+    )
+    await db.commit()
+
+
 def _decode_body(raw_body: bytes) -> str:
     """Decode bytes as UTF-8, falling back to latin-1 (never raises)."""
     try:

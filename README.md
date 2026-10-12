@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/tarkilhk/health-connect-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/tarkilhk/health-connect-mcp/actions/workflows/ci.yml)
 
-Self-hosted Health Connect server with typed access to all 34 stored data types through the Model Context Protocol (MCP). It accepts Android uploads, keeps a SQLite archive, and gives LLM clients both daily summaries and explicitly requested records.
+Self-hosted Health Connect server with typed access to all 34 stored data types through the Model Context Protocol (MCP). It accepts Android uploads, keeps a SQLite archive, and gives MCP clients individual stored records, with optional daily summaries.
 
 This is a fork of [naymEvg/health-conect-mcp](https://github.com/naymEvg/health-conect-mcp). The original project provides the ingestion, storage, aggregation, and debugging foundation. This fork extends the data available through MCP and adopts the current MCP transport used by this project.
 
@@ -23,6 +23,10 @@ The server is for a single person's archive. You run it on your own host and cho
 | Value preservation | Blood pressure retains both readings; nutrition retains optional nutrients; sleep retains nested stages. Fields with no defined schema remain stored JSON with a caveat. |
 | Date queries | Queries compare UTC instants across timezone offsets, preserve microsecond ordering, and respect `TIMEZONE`, `DAY_BOUNDARY_HOUR`, and daylight-saving boundaries. |
 | Pagination | Cursors are bound to the original type and date window. Tied timestamps use event IDs for deterministic ordering. Invalid limits, dates, types, and cursors return MCP errors. |
+| Ingestion isolation | One shared validation/persistence pipeline serializes writes; MCP and debug use a separate query-only connection and see committed data. |
+| Sleep calculations | Detail and daily summaries use one calculation. Missing, unknown, overlapping or incomplete stages leave time asleep unknown. |
+| Aggregate limits | Daily summaries and metric series accept at most 400 output buckets; clients choose weekly buckets explicitly. |
+| Inspector | Coverage and rollup comparisons use the configured local timezone and day boundary, with sleep attributed by session end. |
 | MCP transport | SDK 2.x, protocol `2026-07-28`, and `/mcp` replace the previous transport and `/mcp-health` alias. Requests declare their version and capabilities; discovery uses `server/discover`. |
 | Authentication and metadata | Production-route tests cover authentication and protocol validation. MCP registry metadata points to this fork and its `/mcp` endpoint. |
 | Image releases | Successful pushes to `main` publish semantically versioned GHCR images. `VERSION` controls major/minor; CI allocates patches from existing image tags. |
@@ -39,7 +43,7 @@ Android 14+ ──POST /ingest/hc-webhook──▶ │   Health Hub     │─�
                    browser ──GET /debug──▶ └──────────────────┘
 ```
 
-The companion app reads records from Health Connect and pushes them to this server. The server normalizes, deduplicates, and rolls them up into daily aggregates for LLM clients (Claude, Perplexity, OpenCode). Seven MCP tools provide summaries, diagnostics, and explicit access to all 34 stored data types. Use summaries for totals and `health_records` when individual measurements or nested records are needed. Every response includes `caveats` about missing data and interpretation.
+The companion app reads records from Health Connect and pushes them to this server. The server normalizes, deduplicates, and rolls them up into daily aggregates for LLM clients (Claude, Perplexity, OpenCode). Seven MCP tools provide summaries, diagnostics, and explicit access to all 34 stored data types. Use `health_records` for individual measurements and nested records. The aggregate tools provide additional derived totals. Every response includes `caveats` about missing data and interpretation.
 
 The archive keeps raw uploads for inspection, normalized events for record queries, and daily rollups for summaries. A token-protected `/debug` inspector helps trace payloads, coverage, and source overlap. The companion app can also upload screen-time data to `/ingest/screentime`.
 
@@ -75,9 +79,21 @@ curl -s http://localhost:8001/health
 
 After lint and tests pass, each push to `main` builds the Docker image and publishes it to `ghcr.io/tarkilhk/health-connect-mcp` with a semantic version tag and `latest`.
 
-`VERSION` contains only the major and minor version, currently `0.2`. CI reads the published tags and allocates the next patch: `0.2.0`, `0.2.1`, and so on. Change `VERSION` to `0.3` to start publishing `0.3.0`. Keep published version tags in GHCR so CI can continue the patch sequence.
+`VERSION` contains only the major and minor version, currently `0.3`. CI reads the published tags and allocates the next patch: `0.3.0`, `0.3.1`, and so on. Change `VERSION` to `0.4` to start publishing `0.4.0`. Keep published version tags in GHCR so CI can continue the patch sequence.
 
 Publishing uses GitHub's built-in `GITHUB_TOKEN`; no extra secret or registry registration is needed. On a fork, enable workflows from the repository's Actions tab before pushing. New GHCR packages are private by default; change the package's visibility to public if you want unauthenticated pulls. See [GitHub's Container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
+## Refreshing derived summaries
+
+Individual records and raw uploads remain unchanged by this cleanup. Existing cached summaries need recomputation to use the corrected sleep and timestamp calculations. Stop the service, rebuild only the derived cache, then start it again:
+
+```bash
+docker compose stop health-hub
+docker compose run --rm health-hub python -m health_hub --rebuild-rollups
+docker compose up -d health-hub
+```
+
+For a local installation, run `python -m health_hub --rebuild-rollups` with the same environment and `DATABASE_PATH` as the stopped server. The rebuild uses `TIMEZONE` and `DAY_BOUNDARY_HOUR` and commits atomically. `DATABASE_PATH` must name a file; separate read and write connections require shared storage.
 
 ## Companion apps
 

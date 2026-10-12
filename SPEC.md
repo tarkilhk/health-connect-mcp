@@ -34,6 +34,35 @@ The extension adds `contract/values.py`, `mcp_server/schemas_records.py`,
 `mcp_server/records_query.py`, `mcp_server/tools_records.py`, and focused MCP
 test modules. Existing rollup tools cover their documented aggregate subset.
 
+### Storage and aggregation cleanup
+
+Individual records are the primary MCP interface. Aggregate tools remain
+additional derived views and never modify stored values. This update
+supersedes conflicting calculation and connection instructions below.
+
+`db/store.py` owns separate committed-read and serialized-write connections
+to a SQLite file. One ingestion pipeline owns each complete write unit;
+raw input commits separately, while events, stages, diagnostics and rollups
+commit atomically. Failed or cancelled requests roll back before releasing
+the writer. All time-window comparisons use indexed canonical UTC instants.
+
+`aggregate/sleep.py` supplies both detail and rollup calculations. Time in
+bed is the session duration. Time asleep sums sleeping/light/deep/rem and
+excludes awake/awake_in_bed/out_of_bed. Missing, unknown, overlapping,
+incomplete or inconsistent stages leave time asleep unknown.
+
+Daily summaries and metric series enforce 400 output buckets. Weekly
+bucketing must be requested explicitly; unknown metrics are MCP errors.
+Partial recorded coverage remains partial even when a metric is present.
+Sleep detail caps sessions at 400 and directs pagination to health_records.
+Debug coverage and rollup comparisons use configured local day attribution.
+
+`python -m health_hub --rebuild-rollups` atomically replaces the optional
+summary cache using stored events and current timezone settings. Run it
+with the service stopped after changing aggregation rules. It does not
+rewrite raw payloads or individual records. Unused schemas.py and Event.stages
+are removed; output schemas live with the record tools.
+
 Версия спеки: 2026-08-09. Это **единственный источник истины** по требованиям.
 Если код расходится со спекой — прав документ. Если реальность расходится со спекой — остановись и спроси.
 

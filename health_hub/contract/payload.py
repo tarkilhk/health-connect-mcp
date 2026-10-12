@@ -1,6 +1,6 @@
 """Pydantic v2 payload models and Event dataclass.
 
-HealthPayload allows the 25 dynamic type keys plus _diagnostics as extra
+HealthPayload allows the 34 dynamic type keys plus _diagnostics as extra
 fields, but rejects any key outside that set — notably `device`, which only
 belongs in ScreenTimePayload.
 """
@@ -64,4 +64,3 @@ class Event:
     end_utc: str
     value_num: float | None
     value_json: str
-    stages: list[dict] | None = None

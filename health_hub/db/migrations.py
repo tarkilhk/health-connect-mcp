@@ -8,14 +8,14 @@ import aiosqlite
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 async def apply_migrations(db: aiosqlite.Connection) -> None:
     """Execute schema.sql and record the current version.
 
-    Idempotent: every statement in schema.sql uses IF NOT EXISTS, so running
-    this twice is safe.
+    Idempotent DDL adds the current indexes and removes obsolete indexes.
+    Stored events and raw payloads are unchanged.
     """
     schema_sql = _read_schema_sql()
     await db.executescript(schema_sql)

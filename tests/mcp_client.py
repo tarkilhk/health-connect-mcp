@@ -1,6 +1,6 @@
 """Integration tests for the MCP server layer (Phase 6).
 
-Uses httpx.ASGITransport against a Starlette app with an in-memory SQLite DB.
+Uses httpx.ASGITransport against a Starlette app with an temporary-file SQLite DB.
 The MCP session manager is started manually in the fixture because
 httpx.ASGITransport does not emit ASGI lifespan events.
 """
@@ -12,7 +12,6 @@ import hmac
 import json
 from pathlib import Path
 
-import aiosqlite
 import httpx
 import pytest
 from starlette.applications import Starlette
@@ -22,7 +21,7 @@ from health_hub.api.routes_health import routes as health_routes
 from health_hub.api.routes_ingest import routes as ingest_routes
 from health_hub.app import _MCPAuthMiddleware
 from health_hub.config import Settings
-from health_hub.db.migrations import apply_migrations
+from health_hub.db.store import Database
 
 # Importing tool modules registers @mcp.tool() decorators on the shared mcp.
 from health_hub.mcp_server.server import create_mcp_app, mcp, set_db
@@ -73,13 +72,13 @@ def _tool_result(resp_json: dict) -> dict:
     raise ValueError(f"no text content: {resp_json}")
 
 
-def _make_settings() -> Settings:
+def _make_settings(database_path: str) -> Settings:
     return Settings(
         device_token=DEVICE_TOKEN,
         mcp_token=MCP_TOKEN,
         allowed_hosts=["test", "test:*"],
         signing_key=SIGNING_SECRET,
-        database_path=":memory:",
+        database_path=database_path,
         timezone="UTC",
         day_boundary_hour=0,
         log_level="ERROR",
@@ -88,21 +87,21 @@ def _make_settings() -> Settings:
 
 
 @pytest.fixture
-async def test_app(monkeypatch):
-    """Starlette app with in-memory DB, MCP routes, and session manager running."""
+async def test_app(monkeypatch, tmp_path):
+    """Starlette app with temporary-file DB, MCP routes, and session manager running."""
     monkeypatch.setenv("TIMEZONE", "UTC")
     monkeypatch.setenv("DAY_BOUNDARY_HOUR", "0")
-    settings = _make_settings()
-    db = await aiosqlite.connect(":memory:")
-    db.row_factory = aiosqlite.Row
-    await apply_migrations(db)
-    await set_db(db)
+    settings = _make_settings(str(tmp_path / "synthetic.sqlite3"))
+    database = await Database.open(settings)
+    db = database.reader
+    set_db(db)
     mcp_app = create_mcp_app(settings)
     app = Starlette(
         routes=health_routes + ingest_routes + debug_routes + list(mcp_app.routes),
     )
     app.state.settings = settings
     app.state.db = db
+    app.state.database = database
     app.add_middleware(MCPProtocolMiddleware)
     app.add_middleware(_MCPAuthMiddleware, mcp_token=MCP_TOKEN)
 
@@ -123,7 +122,7 @@ async def test_app(monkeypatch):
             await session_task
         except asyncio.CancelledError:
             pass
-        await db.close()
+        await database.close()
 
 
 @pytest.fixture
@@ -135,7 +134,7 @@ async def client(test_app):
 
 @pytest.fixture
 async def db(test_app):
-    return test_app.state.db
+    return test_app.state.database._writer
 
 
 async def _mcp_call(client, method: str, params: dict | None = None) -> dict:

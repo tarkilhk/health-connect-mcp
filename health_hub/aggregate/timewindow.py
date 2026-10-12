@@ -9,7 +9,7 @@ to the previous calendar date.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 
@@ -60,3 +60,15 @@ def day_bounds_utc(local_date: str, tz: str = "UTC", day_boundary_hour: int = 0)
     start_utc = local_start.astimezone(UTC)
     end_utc = local_end.astimezone(UTC)
     return (start_utc.isoformat(), end_utc.isoformat())
+
+
+def date_window(date_from: str, date_to: str, tz: str, boundary: int) -> tuple[str, str]:
+    """Inclusive canonical local dates mapped to a half-open UTC window."""
+    start, end = date.fromisoformat(date_from), date.fromisoformat(date_to)
+    if start.isoformat() != date_from or end.isoformat() != date_to:
+        raise ValueError("dates must use YYYY-MM-DD")
+    if end < start:
+        raise ValueError("date_to must be on or after date_from")
+    begin, _ = day_bounds_utc(date_from, tz, boundary)
+    _, finish = day_bounds_utc(date_to, tz, boundary)
+    return begin, finish

@@ -8,30 +8,39 @@ raw payload.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Annotated
+
+from pydantic import Field
 
 from health_hub.contract.registry import TYPE_REGISTRY
+from health_hub.db.inspect_payloads import load_diagnostics
 from health_hub.mcp_server.server import get_db, mcp
 
+_COVERAGE_SQL = {
+    False: "SELECT count(DISTINCT substr(utc_instant(start_utc), 1, 10)) FROM events "
+           "WHERE data_type = ? AND utc_instant(start_utc) >= utc_instant(?) "
+           "AND utc_instant(start_utc) < utc_instant(?)",
+    True: "SELECT count(DISTINCT substr(utc_instant(end_utc), 1, 10)) FROM events "
+          "WHERE data_type = ? AND utc_instant(end_utc) >= utc_instant(?) "
+          "AND utc_instant(end_utc) < utc_instant(?)",
+}
 
 @mcp.tool()
-async def get_sync_health(days: int = 30) -> dict:
+async def get_sync_health(days: Annotated[int, Field(strict=True, ge=1, le=365)] = 30) -> dict:
     """Get health check per data type: last event, coverage, gaps, errors.
 
     Args:
-        days: Number of days to check (default 30)
+        days: UTC calendar days including today, from 1 to 365 (default 30)
     """
     db = get_db()
-    if days < 1:
-        return {"metrics": [], "period_days": 0, "caveats": ["days must be >= 1"]}
-
     now = datetime.now(UTC)
-    period_start = now - timedelta(days=days)
-    period_start_iso = period_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+    period_start_iso = (now.date() - timedelta(days=days - 1)).isoformat() + "T00:00:00Z"
+    period_end_iso = (now.date() + timedelta(days=1)).isoformat() + "T00:00:00Z"
 
     metrics: list[dict] = []
     caveats: list[str] = []
     for data_type in sorted(TYPE_REGISTRY.keys()):
-        metric = await _check_one_type(db, data_type, period_start_iso, days)
+        metric = await _check_one_type(db, data_type, period_start_iso, period_end_iso, days)
         metrics.append(metric)
         if metric["missing_days"] > 0:
             caveats.append(
@@ -41,27 +50,27 @@ async def get_sync_health(days: int = 30) -> dict:
             caveats.append(f"{data_type}: last error: {metric['last_error']}")
 
     if not any(m["last_event_utc"] for m in metrics):
-        caveats.append("no events found for any data type in the period")
+        caveats.append("no stored events found for any data type")
     if not caveats:
         caveats.append("all data types have full coverage")
     return {"metrics": metrics, "period_days": days, "caveats": caveats}
 
 
 async def _check_one_type(
-    db, data_type: str, period_start_iso: str, days: int
+    db, data_type: str, period_start_iso: str, period_end_iso: str, days: int
 ) -> dict:
     """Check sync health for one data type."""
     cursor = await db.execute(
-        "SELECT MAX(end_utc) FROM events WHERE data_type = ?",
+        "SELECT end_utc FROM events WHERE data_type = ? "
+        "ORDER BY utc_instant(end_utc) DESC LIMIT 1",
         (data_type,),
     )
-    last_event = (await cursor.fetchone())[0]
+    last_row = await cursor.fetchone()
+    last_event = last_row[0] if last_row else None
 
     cursor = await db.execute(
-        "SELECT COUNT(DISTINCT CASE WHEN data_type = 'sleep' "
-        "THEN substr(end_utc, 1, 10) ELSE substr(start_utc, 1, 10) END) "
-        "FROM events WHERE data_type = ? AND start_utc >= ?",
-        (data_type, period_start_iso),
+        _COVERAGE_SQL[data_type == "sleep"],
+        (data_type, period_start_iso, period_end_iso),
     )
     coverage_days = (await cursor.fetchone())[0] or 0
 
@@ -93,7 +102,7 @@ async def inspect_last_payload() -> dict:
             "source": None, "byte_size": None, "signature_valid": None,
             "diagnostics": [], "caveats": ["no payloads received yet"],
         }
-    diagnostics = await _load_diagnostics(db, row[0])
+    diagnostics = await load_diagnostics(db, row[0])
     caveats = _payload_caveats(row[5], diagnostics)
     return {
         "payload_id": row[0], "received_at": row[1], "app_version": row[3],
@@ -110,24 +119,6 @@ async def _last_payload_row(db):
         "signature_valid FROM raw_payloads ORDER BY id DESC LIMIT 1"
     )
     return await cursor.fetchone()
-
-
-async def _load_diagnostics(db, payload_id: int) -> list[dict]:
-    """Load sync_diagnostics rows for one payload."""
-    cursor = await db.execute(
-        "SELECT data_type, permission_granted, page_count, raw_record_count, "
-        "filtered_record_count, min_time, max_time, last_sync, error "
-        "FROM sync_diagnostics WHERE payload_id = ? ORDER BY data_type",
-        (payload_id,),
-    )
-    return [
-        {
-            "data_type": r[0], "permission_granted": r[1], "page_count": r[2],
-            "raw_record_count": r[3], "filtered_record_count": r[4],
-            "min_time": r[5], "max_time": r[6], "last_sync": r[7], "error": r[8],
-        }
-        for r in await cursor.fetchall()
-    ]
 
 
 def _payload_caveats(sig_valid, diagnostics: list[dict]) -> list[str]:

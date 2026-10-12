@@ -14,8 +14,7 @@ from health_hub.api.routes_debug import routes as debug_routes
 from health_hub.api.routes_health import routes as health_routes
 from health_hub.api.routes_ingest import routes as ingest_routes
 from health_hub.config import Settings, load_settings
-from health_hub.db.connection import open_connection
-from health_hub.db.migrations import apply_migrations
+from health_hub.db.store import Database
 from health_hub.logging_setup import configure_logging
 
 # Import tool modules to register @mcp.tool() decorators at import time.
@@ -53,12 +52,10 @@ async def lifespan(app: Starlette) -> AsyncIterator[None]:
     log.info(
         "Starting Health Hub (port=%d, log_level=%s)", settings.port, settings.log_level
     )
-    db = await open_connection(settings)
-    await apply_migrations(db)
-    app.state.db = db
-    # Expose the DB to MCP tools via the module-level accessor (SPEC §9.3.3:
-    # single worker, so one process-wide connection is safe).
-    await set_db(db)
+    database = await Database.open(settings)
+    app.state.database = database
+    app.state.db = database.reader
+    set_db(database.reader)
     try:
         # Run the MCP session manager inside the DB lifespan so both are
         # alive for the duration of the app (SPEC §9.3.2: the built-in
@@ -66,7 +63,8 @@ async def lifespan(app: Starlette) -> AsyncIterator[None]:
         async with mcp_lifespan(app):
             yield
     finally:
-        await db.close()
+        set_db(None)
+        await database.close()
         log.info("Health Hub stopped")
 
 

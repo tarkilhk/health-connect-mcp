@@ -122,25 +122,18 @@ async def upsert_screen_time(
             (local_date, total_minutes, payload_id, now),
         )
 
-        await db.execute(
-            "DELETE FROM screen_time_apps WHERE local_date = ?",
-            (local_date,),
-        )
-
-        for app in day.get("apps") or []:
-            await db.execute(
-                """INSERT OR REPLACE INTO screen_time_apps
-                   (local_date, package, name, minutes, last_used)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (
-                    local_date,
-                    app.get("package"),
-                    app.get("name"),
-                    app.get("minutes"),
-                    app.get("last_used"),
-                ),
-            )
+        await _replace_screen_apps(db, local_date, day.get("apps") or [])
 
         days_written += 1
 
     return days_written
+
+
+async def _replace_screen_apps(db: aiosqlite.Connection, local_date: str, apps: list[dict]) -> None:
+    await db.execute("DELETE FROM screen_time_apps WHERE local_date = ?", (local_date,))
+    await db.executemany(
+        """INSERT OR REPLACE INTO screen_time_apps
+           (local_date, package, name, minutes, last_used) VALUES (?, ?, ?, ?, ?)""",
+        [(local_date, app.get("package"), app.get("name"), app.get("minutes"), app.get("last_used"))
+         for app in apps],
+    )

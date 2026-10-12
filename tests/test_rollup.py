@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from health_hub.aggregate.rollup import DailyRollup, compute_rollup
 from health_hub.contract.payload import Event
+from health_hub.ingest.identity import event_id
 
 
 def _evt(data_type: str, start: str, end: str, value_num: float | None) -> Event:
@@ -50,11 +51,11 @@ def test_sleep_8h_with_2h_awake():
         None,
     )
     stages = [
-        {"session_event_id": "s1", "stage": "asleep", "start_utc": "2026-08-08T22:00:00Z",
+        {"session_event_id": event_id(sleep.data_type, sleep.start_utc, sleep.end_utc, sleep.value_json), "stage": "sleeping", "start_utc": "2026-08-08T22:00:00Z",
          "end_utc": "2026-08-09T00:00:00Z", "seconds": 7200},
-        {"session_event_id": "s1", "stage": "awake", "start_utc": "2026-08-09T00:00:00Z",
+        {"session_event_id": event_id(sleep.data_type, sleep.start_utc, sleep.end_utc, sleep.value_json), "stage": "awake", "start_utc": "2026-08-09T00:00:00Z",
          "end_utc": "2026-08-09T02:00:00Z", "seconds": 7200},
-        {"session_event_id": "s1", "stage": "asleep", "start_utc": "2026-08-09T02:00:00Z",
+        {"session_event_id": event_id(sleep.data_type, sleep.start_utc, sleep.end_utc, sleep.value_json), "stage": "sleeping", "start_utc": "2026-08-09T02:00:00Z",
          "end_utc": "2026-08-09T06:00:00Z", "seconds": 14400},
     ]
     r = compute_rollup(DATE, [sleep], stages)

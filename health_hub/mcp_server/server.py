@@ -13,8 +13,8 @@ were written for MCP 1.x):
   invoked manually from the parent lifespan.
 
 DB access: a module-level ``_db`` connection set during the parent lifespan.
-This is safe because the server runs with ``--workers 1`` (SPEC §9.3.3) —
-there is exactly one process.
+It is a dedicated, query-only connection: concurrent ingestion uses a
+separate writer and never exposes uncommitted events.
 """
 from __future__ import annotations
 
@@ -27,7 +27,6 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 
 from health_hub import __version__
-from health_hub.aggregate.timewindow import utc_sort_key
 from health_hub.config import Settings
 
 mcp: MCPServer = MCPServer("health-connect-mcp", version=__version__)
@@ -35,10 +34,9 @@ mcp: MCPServer = MCPServer("health-connect-mcp", version=__version__)
 _db: aiosqlite.Connection | None = None
 
 
-async def set_db(db: aiosqlite.Connection) -> None:
-    """Store the app-level DB connection for use by MCP tools."""
+def set_db(db: aiosqlite.Connection | None) -> None:
+    """Set the committed-read connection, or clear it during shutdown."""
     global _db
-    await db.create_function("utc_instant", 1, utc_sort_key, deterministic=True)
     _db = db
 
 

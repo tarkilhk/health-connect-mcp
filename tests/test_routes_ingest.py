@@ -1,6 +1,6 @@
 """Integration tests for the ingestion endpoints.
 
-Uses httpx.ASGITransport against a Starlette app backed by an in-memory
+Uses httpx.ASGITransport against a Starlette app backed by an temporary-file
 SQLite database. No network, no real server.
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from starlette.applications import Starlette
 from health_hub.api.routes_health import routes as health_routes
 from health_hub.api.routes_ingest import routes as ingest_routes
 from health_hub.config import Settings
-from health_hub.db.migrations import apply_migrations
+from health_hub.db.store import Database
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DEVICE_TOKEN = "test-device-token"
@@ -42,35 +42,35 @@ def _load_full_payload() -> bytes:
 
 
 @pytest.fixture
-async def test_app():
-    """Starlette app with in-memory DB and signature verification active."""
+async def test_app(tmp_path):
+    """Starlette app with temporary-file DB and signature verification active."""
     settings = Settings(
         device_token=DEVICE_TOKEN,
         mcp_token="test-mcp-token",
         allowed_hosts=["localhost", "localhost:*"],
         signing_key=SIGNING_SECRET,
-        database_path=":memory:",
+        database_path=str(tmp_path / "synthetic.sqlite3"),
         timezone="UTC",
         day_boundary_hour=0,
         log_level="ERROR",
         port=8000,
     )
-    db = await aiosqlite.connect(":memory:")
-    db.row_factory = aiosqlite.Row
-    await apply_migrations(db)
+    database = await Database.open(settings)
+    db = database.reader
     app = Starlette(routes=health_routes + ingest_routes)
     app.state.settings = settings
     app.state.db = db
+    app.state.database = database
     try:
         yield app
     finally:
-        await db.close()
+        await database.close()
 
 
 @pytest.fixture
 async def db(test_app):
-    """Direct access to the in-memory DB owned by test_app."""
-    return test_app.state.db
+    """Direct access to the temporary-file DB owned by test_app."""
+    return test_app.state.database._writer
 
 
 @pytest.fixture
@@ -518,7 +518,7 @@ async def test_echo_db_failure_returns_200_with_warning(client, db, monkeypatch)
     async def fail_store(*args, **kwargs):
         raise aiosqlite.OperationalError("simulated DB failure")
 
-    monkeypatch.setattr("health_hub.api.routes_ingest.store_raw_payload", fail_store)
+    monkeypatch.setattr("health_hub.ingest.service.store_raw_payload", fail_store)
     body = b"echo-data"
     response = await client.post("/ingest/echo", content=body)
     assert response.status_code == 200
@@ -538,7 +538,7 @@ async def test_health_db_error_returns_500(client, db, monkeypatch):
     async def fail_upsert(*args, **kwargs):
         raise aiosqlite.OperationalError("simulated DB failure")
 
-    monkeypatch.setattr("health_hub.api.routes_ingest.upsert_events", fail_upsert)
+    monkeypatch.setattr("health_hub.ingest.persist.upsert_events", fail_upsert)
     body = _load_full_payload()
     response = await client.post(
         "/ingest/health",
@@ -568,7 +568,7 @@ async def test_health_retry_after_500_is_idempotent(client, db, monkeypatch):
             raise aiosqlite.OperationalError("simulated diagnostics failure")
         return await _real_store_diag(*args, **kwargs)
 
-    monkeypatch.setattr("health_hub.api.routes_ingest.store_diagnostics", maybe_fail)
+    monkeypatch.setattr("health_hub.ingest.persist.store_diagnostics", maybe_fail)
 
     # First attempt: fails during diagnostics.
     r1 = await client.post("/ingest/health", content=body, headers=headers)
@@ -594,7 +594,7 @@ async def test_health_diagnostics_failure_rolls_back_events(client, db, monkeypa
     async def fail_diagnostics(*args, **kwargs):
         raise aiosqlite.OperationalError("simulated diagnostics failure")
 
-    monkeypatch.setattr("health_hub.api.routes_ingest.store_diagnostics", fail_diagnostics)
+    monkeypatch.setattr("health_hub.ingest.persist.store_diagnostics", fail_diagnostics)
 
     body = _load_full_payload()
     response = await client.post(
@@ -756,7 +756,7 @@ async def test_recalc_failure_rolls_back_events_and_returns_500(client, db, monk
         raise ValueError("simulated recalc failure")
 
     monkeypatch.setattr(
-        "health_hub.api.routes_ingest.recalc_rollups_for_dates", fail_recalc
+        "health_hub.ingest.persist.recalc_rollups_for_dates", fail_recalc
     )
 
     body = _load_full_payload()
