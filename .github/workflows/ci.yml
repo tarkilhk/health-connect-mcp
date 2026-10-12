@@ -26,6 +26,7 @@ jobs:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Allocate and publish each patch version while holding the same lock.
     concurrency:
       group: ghcr-publish-${{ github.repository }}
       cancel-in-progress: false
