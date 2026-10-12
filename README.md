@@ -59,7 +59,9 @@ Add to Claude Desktop config (`claude_desktop_config.json`):
   }
 }
 ```
-For Perplexity, OpenCode, or other MCP clients, use the same URL and token. The `Authorization` header must include the `Bearer ` prefix — the server rejects requests without it.
+Use a client that supports MCP protocol revision `2026-07-28`. The server uses MCP Python SDK 2.x and accepts only that revision, at `/mcp`. Each request carries its protocol version and client capabilities; there is no `initialize` handshake or `Mcp-Session-Id`. The `Authorization` header must include the `Bearer ` prefix.
+
+Older protocol revisions and the former `/mcp-health` route are not supported. Client compatibility depends on the installed client version and runtime. For Hermes, select `protocol: stateless` in the server configuration. See the client's documentation for current protocol support.
 
 ## MCP Tools
 

@@ -18,6 +18,8 @@ pytest tests/ -v
 
 The suite is fully async (`pytest-asyncio`, `auto` mode) and uses `httpx` for route tests. No external services are required — tests use an in-memory or temp-file SQLite database.
 
+The server uses MCP Python SDK 2.3 or later within the 2.x series. `tests/test_mcp_modern.py` verifies protocol revision `2026-07-28` directly, with per-request metadata and no initialization handshake or session IDs.
+
 ## Linting
 
 ```bash

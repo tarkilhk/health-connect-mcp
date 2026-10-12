@@ -1,7 +1,7 @@
 """Stored-data caveats and structured MCP output."""
 import json
 
-from tests.mcp_client import _call_tool, _ingest, _init_session, _mcp_call, _tool_result
+from tests.mcp_client import _call_tool, _ingest, _mcp_call, _tool_result
 
 
 async def test_invalid_stored_value_is_reported_and_pagination_advances(client, db):
@@ -16,21 +16,19 @@ async def test_invalid_stored_value_is_reported_and_pagination_advances(client, 
         json.dumps({"time": "2026-08-09T12:00:00Z", "bpm": "unknown"}), "2026-08-09T12:00:00Z",
     ))
     await db.commit()
-    sid = await _init_session(client)
     args = {"data_type": "heart_rate", "date_from": "2026-08-09", "date_to": "2026-08-09", "limit": 1}
-    page = await _call_tool(client, sid, "health_records", args)
+    page = await _call_tool(client, "health_records", args)
     assert page["records"] == []
     assert any("invalid values" in c for c in page["caveats"])
     assert page["next_cursor"]
-    final = await _call_tool(client, sid, "health_records", {**args, "cursor": page["next_cursor"]})
+    final = await _call_tool(client, "health_records", {**args, "cursor": page["next_cursor"]})
     assert final["records"][0]["values"]["bpm"] == 61
     assert final["next_cursor"] is None
 
 
 async def test_new_tools_return_matching_text_and_structured_content(client):
-    sid = await _init_session(client)
     for name, args in [("list_data_types", {}), ("health_records", {
         "data_type": "test", "date_from": "2026-08-09", "date_to": "2026-08-09",
     })]:
-        response = await _mcp_call(client, "tools/call", {"name": name, "arguments": args}, sid)
+        response = await _mcp_call(client, "tools/call", {"name": name, "arguments": args})
         assert response["result"]["structuredContent"] == _tool_result(response)

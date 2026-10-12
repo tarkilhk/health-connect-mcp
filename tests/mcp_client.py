@@ -25,7 +25,8 @@ from health_hub.config import Settings
 from health_hub.db.migrations import apply_migrations
 
 # Importing tool modules registers @mcp.tool() decorators on the shared mcp.
-from health_hub.mcp_server.server import mcp, set_db
+from health_hub.mcp_server.server import create_mcp_app, mcp, set_db
+from health_hub.mcp_server.transport import PROTOCOL_VERSION, MCPProtocolMiddleware
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DEVICE_TOKEN = "test-device-token"
@@ -36,6 +37,7 @@ _MCP_HEADERS = {
     "Content-Type": "application/json",
     "Accept": "application/json, text/event-stream",
     "Authorization": f"Bearer {MCP_TOKEN}",
+    "MCP-Protocol-Version": PROTOCOL_VERSION,
 }
 
 
@@ -75,7 +77,7 @@ def _make_settings() -> Settings:
     return Settings(
         device_token=DEVICE_TOKEN,
         mcp_token=MCP_TOKEN,
-        allowed_hosts=["localhost", "localhost:*"],
+        allowed_hosts=["test", "test:*"],
         signing_key=SIGNING_SECRET,
         database_path=":memory:",
         timezone="UTC",
@@ -95,15 +97,13 @@ async def test_app(monkeypatch):
     db.row_factory = aiosqlite.Row
     await apply_migrations(db)
     await set_db(db)
-    # Build MCP app with DNS-rebinding protection disabled for tests.
-    mcp_app = mcp.streamable_http_app(
-        streamable_http_path="/mcp", transport_security=None, host="test"
-    )
+    mcp_app = create_mcp_app(settings)
     app = Starlette(
         routes=health_routes + ingest_routes + debug_routes + list(mcp_app.routes),
     )
     app.state.settings = settings
     app.state.db = db
+    app.add_middleware(MCPProtocolMiddleware)
     app.add_middleware(_MCPAuthMiddleware, mcp_token=MCP_TOKEN)
 
     # Run session_manager.run() in a background task so its anyio cancel
@@ -138,47 +138,27 @@ async def db(test_app):
     return test_app.state.db
 
 
-async def _mcp_call(client, method: str, params: dict | None = None, sid: str | None = None) -> dict:
-    """Send a JSON-RPC request to /mcp and return the parsed response."""
-    body: dict = {"jsonrpc": "2.0", "id": 1, "method": method}
-    if params is not None:
-        body["params"] = params
-    headers = dict(_MCP_HEADERS)
-    if sid:
-        headers["Mcp-Session-Id"] = sid
-    r = await client.post("/mcp", json=body, headers=headers)
+async def _mcp_call(client, method: str, params: dict | None = None) -> dict:
+    """Send a current-protocol request; every call is independent."""
+    params = {**(params or {}), "_meta": {
+        "io.modelcontextprotocol/protocolVersion": PROTOCOL_VERSION,
+        "io.modelcontextprotocol/clientCapabilities": {},
+        "io.modelcontextprotocol/clientInfo": {"name": "synthetic", "version": "1"},
+    }}
+    headers = {**_MCP_HEADERS, "Mcp-Method": method}
+    if method == "tools/call":
+        headers["Mcp-Name"] = params["name"]
+    r = await client.post("/mcp", headers=headers, json={
+        "jsonrpc": "2.0", "id": 1, "method": method, "params": params,
+    })
     assert r.status_code == 200, f"{method} failed: {r.status_code} {r.text[:200]}"
-    return _parse_sse(r.text)
+    assert "mcp-session-id" not in r.headers
+    return r.json() if "application/json" in r.headers["content-type"] else _parse_sse(r.text)
 
 
-async def _init_session(client) -> str:
-    """Initialize an MCP session and return the session ID."""
-    r = await client.post(
-        "/mcp",
-        json={
-            "jsonrpc": "2.0", "id": 1, "method": "initialize",
-            "params": {
-                "protocolVersion": "2025-06-18", "capabilities": {},
-                "clientInfo": {"name": "test", "version": "1"},
-            },
-        },
-        headers=_MCP_HEADERS,
-    )
-    assert r.status_code == 200, f"initialize failed: {r.status_code}"
-    sid = r.headers.get("mcp-session-id")
-    assert sid, "no session ID in initialize response"
-    return sid
-
-
-async def _call_tool(client, sid: str, name: str, args: dict) -> dict:
+async def _call_tool(client, name: str, args: dict) -> dict:
     """Call an MCP tool and return the parsed result dict."""
-    resp = await _mcp_call(
-        client, "tools/call",
-        {"name": name, "arguments": args}, sid,
-    )
-    return _tool_result(resp)
-
-
+    return _tool_result(await _mcp_call(client, "tools/call", {"name": name, "arguments": args}))
 
 
 async def _ingest(client, payload):

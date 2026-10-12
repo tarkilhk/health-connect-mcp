@@ -5,7 +5,6 @@ from health_hub.mcp_server import tools_ops
 from tests.mcp_client import (
     _auth_headers,
     _call_tool,
-    _init_session,
     _load_full_payload,
     _sign,
 )
@@ -14,8 +13,7 @@ from tests.mcp_client import (
 
 
 async def test_get_sync_health_no_data(client):
-    sid = await _init_session(client)
-    result = await _call_tool(client, sid, "get_sync_health", {"days": 7})
+    result = await _call_tool(client, "get_sync_health", {"days": 7})
     assert result["period_days"] == 7
     assert len(result["metrics"]) == 34  # all data types
     assert all(m["coverage_days"] == 0 for m in result["metrics"])
@@ -34,8 +32,7 @@ async def test_get_sync_health_after_ingest(client, db, monkeypatch):
         "/ingest/health", content=body,
         headers=_auth_headers({"X-Signature": _sign(body)}),
     )
-    sid = await _init_session(client)
-    result = await _call_tool(client, sid, "get_sync_health", {"days": 30})
+    result = await _call_tool(client, "get_sync_health", {"days": 30})
     steps_metric = next(m for m in result["metrics"] if m["data_type"] == "steps")
     assert steps_metric["coverage_days"] >= 1
     assert steps_metric["last_event_utc"] is not None
@@ -46,8 +43,7 @@ async def test_get_sync_health_after_ingest(client, db, monkeypatch):
 
 
 async def test_inspect_last_payload_no_payloads(client):
-    sid = await _init_session(client)
-    result = await _call_tool(client, sid, "inspect_last_payload", {})
+    result = await _call_tool(client, "inspect_last_payload", {})
     assert result["payload_id"] is None
     assert any("no payloads" in c for c in result["caveats"])
 
@@ -58,8 +54,7 @@ async def test_inspect_last_payload_after_ingest(client, db):
         "/ingest/health", content=body,
         headers=_auth_headers({"X-Signature": _sign(body)}),
     )
-    sid = await _init_session(client)
-    result = await _call_tool(client, sid, "inspect_last_payload", {})
+    result = await _call_tool(client, "inspect_last_payload", {})
     assert result["payload_id"] == 1
     assert result["source"] == "health_connect"
     assert result["app_version"] == "1.4.0"
@@ -79,7 +74,6 @@ async def test_caveats_always_present_in_every_tool(client, db):
         "/ingest/health", content=body,
         headers=_auth_headers({"X-Signature": _sign(body)}),
     )
-    sid = await _init_session(client)
 
     calls = [
         ("daily_summary", {"date_from": "2026-08-09", "date_to": "2026-08-09"}),
@@ -89,7 +83,7 @@ async def test_caveats_always_present_in_every_tool(client, db):
         ("inspect_last_payload", {}),
     ]
     for name, args in calls:
-        result = await _call_tool(client, sid, name, args)
+        result = await _call_tool(client, name, args)
         assert "caveats" in result, f"{name} missing caveats key"
         assert isinstance(result["caveats"], list), f"{name} caveats not a list"
         assert len(result["caveats"]) > 0, f"{name} has empty caveats"

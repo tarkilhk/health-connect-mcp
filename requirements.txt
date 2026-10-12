@@ -1,6 +1,6 @@
 uvicorn[standard]>=0.30
 starlette>=0.38
-mcp[cli]>=1.0
+mcp[cli]>=2.3,<3
 aiosqlite>=0.20
 pydantic>=2.0
 pytest>=8.0

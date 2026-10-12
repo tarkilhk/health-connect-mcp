@@ -1,3 +1,3 @@
-"""Health Hub MCP Server — personal MCP server for Health Connect data."""
+"""health-connect-mcp: a personal MCP server for stored Health Connect data."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

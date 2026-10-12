@@ -168,7 +168,24 @@ The `/debug/api/rollup/{date}` endpoint is the key tool for diagnosing double-co
 
 ## MCP tools
 
-All seven tools are invoked over the Streamable HTTP transport at `POST /mcp` with `Authorization: Bearer <MCP_TOKEN>`. Every response is an `object` with a `caveats: string[]` field. `health_records` enforces a maximum of 400 parent records per page; nested values belong to those records. Authentication also applies to GET and DELETE transport requests.
+All seven tools use Streamable HTTP at `POST /mcp` with MCP protocol revision `2026-07-28`. Every tool response is an `object` with a `caveats: string[]` field. `health_records` enforces a maximum of 400 parent records per page; nested values belong to those records.
+
+`/mcp` is the server's only MCP route. Configure clients and registry entries with that exact path. Authentication runs first for every request. Authenticated GET and DELETE requests receive `405` with `Allow: POST`.
+
+Every POST needs these headers:
+
+```text
+Authorization: Bearer <MCP_TOKEN>
+Content-Type: application/json
+Accept: application/json, text/event-stream
+MCP-Protocol-Version: 2026-07-28
+Mcp-Method: tools/call
+Mcp-Name: health_records
+```
+
+`Mcp-Method` must match the JSON-RPC `method`. `Mcp-Name` must match `params.name` for tool calls; omit it for `server/discover` and `tools/list`. Each request's `params._meta` carries the matching `io.modelcontextprotocol/protocolVersion` and `io.modelcontextprotocol/clientCapabilities`. Client identity is optional. Clients can call `server/discover` to obtain `supportedVersions`, capabilities and instructions. Server identity is stamped into result `_meta` under `io.modelcontextprotocol/serverInfo`.
+
+There is no initialization handshake or protocol session. Missing version headers return `400` with `HeaderMismatch` (`-32020`); older or unknown revisions return `400` with `UnsupportedProtocolVersion` (`-32022`). Requests using the current header but mismatched message metadata are rejected by the SDK. The removed `initialize` method is rejected even when the current protocol header is supplied.
 
 ### `list_data_types`
 
@@ -190,7 +207,8 @@ Explicit record access for all 34 types. This tool reads normalized stored event
 
 ```json
 {"jsonrpc":"2.0","id":2,"method":"tools/call",
- "params":{"name":"health_records","arguments":{"data_type":"blood_pressure","date_from":"2026-08-09","date_to":"2026-08-09"}}}
+ "params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}},
+           "name":"health_records","arguments":{"data_type":"blood_pressure","date_from":"2026-08-09","date_to":"2026-08-09"}}}
 ```
 
 Example response, with the event hash shortened for display:
@@ -228,7 +246,8 @@ Daily rollups for a date range.
 **Example request:**
 ```json
 {"jsonrpc":"2.0","id":2,"method":"tools/call",
- "params":{"name":"daily_summary","arguments":{"date_from":"2026-08-01","date_to":"2026-08-09"}}}
+ "params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}},
+           "name":"daily_summary","arguments":{"date_from":"2026-08-01","date_to":"2026-08-09"}}}
 ```
 
 **Example response (abridged):**

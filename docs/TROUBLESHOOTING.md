@@ -51,17 +51,19 @@ Symptom → where to look → what to do.
 
 ## MCP client says "unavailable"
 
-**Symptoms:** Claude Desktop (or another MCP client) shows the server as connected, but chats report the tool is unavailable or return `404 session not found`.
+**Symptoms:** An MCP client cannot connect or reports that tools are unavailable.
 
 **Check, in order:**
 
-1. **`workers=1`.** The server must run with a single uvicorn worker. FastMCP holds session state in process memory; with multiple workers, `initialize` lands in one process and `tools/call` in another. The entry point (`__main__.py`) already enforces `workers=1`. If you launch uvicorn another way, pass `--workers 1` explicitly.
+1. **Protocol and URL.** Use exactly `/mcp` with a client that supports `2026-07-28`. Older revisions return `400`; `/mcp-health` returns `404`. There is no `initialize` handshake or `Mcp-Session-Id`. The current SDK rejects inconsistent protocol metadata or method headers. For Hermes, select `protocol: stateless`.
 
 2. **`ALLOWED_HOSTS` exact match.** The MCP SDK does exact string matching on the `Host` header. If `ALLOWED_HOSTS` does not include the exact hostname (and the `:*` variant for non-default ports), every request gets `421 Misdirected Request`. The client interprets this as unavailable. Confirm `ALLOWED_HOSTS` matches the hostname in the client's URL — no wildcards.
 
 3. **`flush_interval -1` in Caddy.** Without it, the MCP response stream hangs until the connection closes. The client times out and reports unavailable. Confirm the Caddyfile has a separate `handle /mcp*` block with `flush_interval -1`.
 
 4. **`Authorization` header.** The client must send `Authorization: Bearer <MCP_TOKEN>` (with the `Bearer ` prefix). A bare token returns `401`. Check the client's config.
+
+Keep the single-worker setting enforced by `__main__.py`; it matches the application's SQLite connection model. The current MCP transport itself has no session affinity requirement.
 
 ## 401 on /debug
 

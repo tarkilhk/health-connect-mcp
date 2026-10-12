@@ -21,6 +21,7 @@ from health_hub.logging_setup import configure_logging
 # Import tool modules to register @mcp.tool() decorators at import time.
 from health_hub.mcp_server import tools_ops, tools_records, tools_sleep, tools_summary  # noqa: F401
 from health_hub.mcp_server.server import create_mcp_app, mcp_lifespan, set_db
+from health_hub.mcp_server.transport import MCPProtocolMiddleware
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class _MCPAuthMiddleware:
         self._mcp_token = mcp_token
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and scope["path"].startswith("/mcp"):
+        if scope["type"] == "http" and scope["path"] == "/mcp":
             auth = next(
                 (v for k, v in scope.get("headers", []) if k == b"authorization"), None
             )
@@ -71,13 +72,11 @@ async def lifespan(app: Starlette) -> AsyncIterator[None]:
 
 def create_app() -> Starlette:
     settings = load_settings()
-    mcp_app = create_mcp_app(settings, "/mcp")
-    # Also serve at /mcp-health for MCP Registry compatibility
-    mcp_health_app = create_mcp_app(settings, "/mcp-health")
+    mcp_app = create_mcp_app(settings)
     # Extract the MCP app's routes directly into the parent so POST /mcp
     # works without a trailing-slash redirect (Mount("/mcp", ...) would 307
     # to /mcp/ and break the SPEC §9 acceptance curl).
-    mcp_routes = list(mcp_app.routes) + list(mcp_health_app.routes)
+    mcp_routes = list(mcp_app.routes)
     app = Starlette(
         debug=settings.log_level.upper() == "DEBUG",
         routes=health_routes + ingest_routes + debug_routes + mcp_routes,
@@ -87,6 +86,7 @@ def create_app() -> Starlette:
     # Gate /mcp routes behind MCP_TOKEN (SPEC §9.2: health data must not be
     # public).  The middleware checks Authorization: Bearer before any route
     # handler runs.
+    app.add_middleware(MCPProtocolMiddleware)
     app.add_middleware(_MCPAuthMiddleware, mcp_token=settings.mcp_token)
     return app
 

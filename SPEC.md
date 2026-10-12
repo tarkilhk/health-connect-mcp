@@ -13,6 +13,14 @@ paginated access. Generate input enums and discriminated output models from
 the registry. Documented value fields have their actual units; fields without
 a defined contract remain JSON, including nested content, with caveats.
 
+The endpoint is only `/mcp`, using MCP Python SDK 2.x and protocol revision
+`2026-07-28` only. Reject earlier revisions and remove `/mcp-health`. Every
+request declares its version and capabilities in `_meta` with matching HTTP
+headers. Use `server/discover`; do not use the historical `initialize`
+handshake or session IDs. This supersedes the transport/session instructions
+in the original phases below. `mcp_server/transport.py` enforces the revision
+after authentication; the SDK validates the request envelope.
+
 Record queries require one type and inclusive local dates using configured
 timezone/day boundary. Instants use measurement time, sleep uses session end,
 and intervals intersect the half-open UTC window without clipping. Pages

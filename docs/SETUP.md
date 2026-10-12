@@ -106,7 +106,7 @@ Run the verification script against your live URL:
 ./scripts/verify_deploy.sh https://your-domain.example.com
 ```
 
-It checks `/health`, confirms `/debug` returns 401 without a token, and runs an MCP `initialize` handshake. All checks must pass.
+Export `MCP_TOKEN` before running the script. It checks `/health`, verifies unauthenticated `/mcp` requests return 401, and calls `server/discover` and `tools/list` using MCP `2026-07-28`. All checks must pass.
 
 ## Step 5: Systemd (optional)
 
@@ -138,7 +138,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now health-hub
 ```
 
-Remember: run uvicorn with **one worker** (`workers=1`). The entry point already enforces this. Multiple workers break MCP session state — `initialize` lands in one process, `tools/call` in another, and the client gets `404 session not found`.
+Run uvicorn with **one worker** (`workers=1`), as enforced by the entry point. The application uses one process-wide SQLite connection. MCP `2026-07-28` requests are stateless and do not need protocol session affinity.
 
 ## Next steps
 

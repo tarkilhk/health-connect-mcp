@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.naymEvg/health-mcp",
-  "title": "Health Hub MCP",
-  "description": "Self-hosted MCP server for Android Health Connect — 34 metrics, daily rollups, dedup, 5 LLM tools.",
-  "version": "0.1.0",
-  "websiteUrl": "https://github.com/naymEvg/health-conect-mcp",
+  "name": "io.github.tarkilhk/health-connect-mcp",
+  "title": "health-connect-mcp",
+  "description": "Self-hosted MCP server for 34 stored health types, with daily rollups, typed records, and 7 tools.",
+  "version": "0.2.0",
+  "websiteUrl": "https://github.com/tarkilhk/health-connect-mcp",
   "repository": {
-    "url": "https://github.com/naymEvg/health-conect-mcp",
+    "url": "https://github.com/tarkilhk/health-connect-mcp",
     "source": "github"
   },
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://{host}/mcp-health",
+      "url": "https://{host}/mcp",
       "variables": {
         "host": {
           "description": "Your server's public hostname with TLS (e.g., health.example.com). Deploy via Docker Compose — see repo README.",

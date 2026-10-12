@@ -9,7 +9,6 @@ from health_hub.contract.registry import TYPE_REGISTRY
 from tests.mcp_client import (
     _call_tool,
     _ingest,
-    _init_session,
     _mcp_call,
 )
 
@@ -37,13 +36,12 @@ def _all_types_payload():
 
 
 async def test_catalog_and_protocol_schemas_cover_all_34(client):
-    sid = await _init_session(client)
-    tools = (await _mcp_call(client, "tools/list", {}, sid))["result"]["tools"]
+    tools = (await _mcp_call(client, "tools/list", {}))["result"]["tools"]
     query_tool = next(t for t in tools if t["name"] == "health_records")
     assert set(query_tool["inputSchema"]["properties"]["data_type"]["enum"]) == set(TYPE_REGISTRY)
     record_schema = query_tool["outputSchema"]["properties"]["records"]["items"]
     assert set(record_schema["discriminator"]["mapping"]) == set(TYPE_REGISTRY)
-    catalog = await _call_tool(client, sid, "list_data_types", {})
+    catalog = await _call_tool(client, "list_data_types", {})
     info = {t["data_type"]: t for t in catalog["data_types"]}
     assert set(info) == set(TYPE_REGISTRY)
     assert info["blood_pressure"]["value_schema"]["properties"]["diastolic"]["unit"] == "mmHg"
@@ -58,12 +56,11 @@ async def test_all_types_round_trip_through_authenticated_mcp(client, db):
     duplicate = await _ingest(client, payload)
     assert duplicate["stored"] == 0
     assert duplicate["duplicates"] == first["stored"]
-    sid = await _init_session(client)
-    tools = (await _mcp_call(client, "tools/list", {}, sid))["result"]["tools"]
+    tools = (await _mcp_call(client, "tools/list", {}))["result"]["tools"]
     schema = next(t for t in tools if t["name"] == "health_records")["outputSchema"]
     validator = Draft202012Validator(schema)
     for key, spec in TYPE_REGISTRY.items():
-        result = await _call_tool(client, sid, "health_records", {
+        result = await _call_tool(client, "health_records", {
             "data_type": key, "date_from": "2026-01-01", "date_to": "2026-12-31",
         })
         validator.validate(result)
@@ -87,13 +84,12 @@ async def test_mcp_transport_requires_bearer_token(client, authorization, method
     assert response.status_code == 401
 
 
-async def test_new_tools_reject_wrong_token_with_valid_session(client):
-    sid = await _init_session(client)
+async def test_new_tools_reject_wrong_token(client):
     for name, args in [("list_data_types", {}), ("health_records", {
         "data_type": "blood_pressure", "date_from": "2026-08-09", "date_to": "2026-08-09",
     })]:
         response = await client.post("/mcp", headers={
-            "Authorization": "Bearer wrong", "Mcp-Session-Id": sid,
+            "Authorization": "Bearer wrong",
             "Accept": "application/json, text/event-stream",
         }, json={"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                  "params": {"name": name, "arguments": args}})

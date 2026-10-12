@@ -1,47 +1,31 @@
 """Integration tests for authenticated MCP summaries and discovery."""
 from tests.mcp_client import (
-    _MCP_HEADERS,
     _auth_headers,
     _call_tool,
-    _init_session,
     _load_full_payload,
     _mcp_call,
-    _parse_sse,
     _sign,
 )
 
-# --- MCP initialize ---------------------------------------------------------
+
+async def test_discovery_returns_supported_version_and_capabilities(client):
+    result = (await _mcp_call(client, "server/discover"))["result"]
+    assert result["supportedVersions"] == ["2026-07-28"]
+    assert "tools" in result["capabilities"]
 
 
-async def test_initialize_returns_capabilities(client):
-    sid = await _init_session(client)
-    assert len(sid) > 0
-
-
-async def test_initialize_response_has_server_info(client):
-    r = await client.post(
-        "/mcp",
-        json={
-            "jsonrpc": "2.0", "id": 1, "method": "initialize",
-            "params": {
-                "protocolVersion": "2025-06-18", "capabilities": {},
-                "clientInfo": {"name": "test", "version": "1"},
-            },
-        },
-        headers=_MCP_HEADERS,
-    )
-    data = _parse_sse(r.text)
-    result = data["result"]
-    assert "capabilities" in result
-    assert result["serverInfo"]["name"] == "health-connect-mcp"
+async def test_discovery_stamps_server_info(client):
+    result = (await _mcp_call(client, "server/discover"))["result"]
+    info = result["_meta"]["io.modelcontextprotocol/serverInfo"]
+    assert info["name"] == "health-connect-mcp"
+    assert info["version"] == "0.2.0"
 
 
 # --- tools/list -------------------------------------------------------------
 
 
 async def test_tools_list_returns_seven_tools(client):
-    sid = await _init_session(client)
-    resp = await _mcp_call(client, "tools/list", {}, sid)
+    resp = await _mcp_call(client, "tools/list", {})
     tool_names = {t["name"] for t in resp["result"]["tools"]}
     expected = {"daily_summary", "metric_series", "sleep_detail", "get_sync_health", "inspect_last_payload", "list_data_types", "health_records"}
     assert tool_names == expected, f"got {tool_names}"
@@ -51,8 +35,7 @@ async def test_tools_list_returns_seven_tools(client):
 
 
 async def test_daily_summary_no_data_returns_caveats(client):
-    sid = await _init_session(client)
-    result = await _call_tool(client, sid, "daily_summary",
+    result = await _call_tool(client, "daily_summary",
                               {"date_from": "2026-08-09", "date_to": "2026-08-09"})
     assert result["days"] == [{"local_date": "2026-08-09"}]
     assert result["coverage"]["2026-08-09"]["steps"] == "absent"
@@ -69,8 +52,7 @@ async def test_daily_summary_after_ingest_returns_rollup(client, db):
     )
     assert r.status_code == 200
 
-    sid = await _init_session(client)
-    result = await _call_tool(client, sid, "daily_summary",
+    result = await _call_tool(client, "daily_summary",
                               {"date_from": "2026-08-09", "date_to": "2026-08-09"})
     days = result["days"]
     assert len(days) == 1
@@ -90,8 +72,7 @@ async def test_daily_summary_with_metrics_filter(client, db):
         "/ingest/health", content=body,
         headers=_auth_headers({"X-Signature": _sign(body)}),
     )
-    sid = await _init_session(client)
-    result = await _call_tool(client, sid, "daily_summary",
+    result = await _call_tool(client, "daily_summary",
                               {"date_from": "2026-08-09", "date_to": "2026-08-09",
                                "metrics": ["steps"]})
     day = result["days"][0]
@@ -110,8 +91,7 @@ async def test_metric_series_returns_points(client, db):
         "/ingest/health", content=body,
         headers=_auth_headers({"X-Signature": _sign(body)}),
     )
-    sid = await _init_session(client)
-    result = await _call_tool(client, sid, "metric_series",
+    result = await _call_tool(client, "metric_series",
                               {"metric": "steps", "date_from": "2026-08-09",
                                "date_to": "2026-08-09"})
     assert result["metric"] == "steps"
@@ -122,8 +102,7 @@ async def test_metric_series_returns_points(client, db):
 
 
 async def test_metric_series_unknown_metric(client):
-    sid = await _init_session(client)
-    result = await _call_tool(client, sid, "metric_series",
+    result = await _call_tool(client, "metric_series",
                               {"metric": "nonexistent", "date_from": "2026-08-09",
                                "date_to": "2026-08-09"})
     assert result["points"] == []
@@ -139,8 +118,7 @@ async def test_sleep_detail_returns_sessions(client, db):
         "/ingest/health", content=body,
         headers=_auth_headers({"X-Signature": _sign(body)}),
     )
-    sid = await _init_session(client)
-    result = await _call_tool(client, sid, "sleep_detail",
+    result = await _call_tool(client, "sleep_detail",
                               {"date_from": "2026-08-08", "date_to": "2026-08-09"})
     sessions = result["sessions"]
     assert len(sessions) >= 2
