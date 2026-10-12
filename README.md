@@ -27,6 +27,14 @@ docker compose up -d --build
 curl -s http://localhost:8000/health
 ```
 
+## Container images
+
+After lint and tests pass, each push to `main` builds the Docker image and publishes it to `ghcr.io/tarkilhk/health-connect-mcp` with a semantic version tag and `latest`.
+
+`VERSION` contains only the major and minor version, currently `0.2`. CI reads the published tags and allocates the next patch: `0.2.0`, `0.2.1`, and so on. Change `VERSION` to `0.3` to start publishing `0.3.0`. Keep published version tags in GHCR so CI can continue the patch sequence.
+
+Publishing uses GitHub's built-in `GITHUB_TOKEN`; no extra secret or registry registration is needed. On a fork, enable workflows from the repository's Actions tab before pushing. New GHCR packages are private by default; change the package's visibility to public if you want unauthenticated pulls. See [GitHub's Container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+
 ## Companion Apps
 
 The server accepts health data from **two** Android apps via separate endpoints. Both write to the same database and use content-hash deduplication — sending the same data from both apps will not double-count.
