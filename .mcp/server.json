@@ -3,7 +3,7 @@
   "name": "io.github.tarkilhk/health-connect-mcp",
   "title": "health-connect-mcp",
   "description": "Self-hosted MCP server for 34 stored health types, with individual typed records, optional daily rollups, and 7 tools.",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "websiteUrl": "https://github.com/tarkilhk/health-connect-mcp",
   "repository": {
     "url": "https://github.com/tarkilhk/health-connect-mcp",

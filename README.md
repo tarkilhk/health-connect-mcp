@@ -79,7 +79,7 @@ curl -s http://localhost:8001/health
 
 After lint and tests pass, each push to `main` builds the Docker image and publishes it to `ghcr.io/tarkilhk/health-connect-mcp` with a semantic version tag and `latest`.
 
-`VERSION` contains only the major and minor version, currently `0.3`. CI reads the published tags and allocates the next patch: `0.3.0`, `0.3.1`, and so on. Change `VERSION` to `0.4` to start publishing `0.4.0`. Keep published version tags in GHCR so CI can continue the patch sequence.
+`VERSION` contains only the major and minor version, currently `1.0`. CI reads the published tags and allocates the next patch: `1.0.0`, `1.0.1`, and so on. Change `VERSION` to `1.1` to start publishing `1.1.0`. Keep published version tags in GHCR so CI can continue the patch sequence.
 
 Publishing uses GitHub's built-in `GITHUB_TOKEN`; no extra secret or registry registration is needed. On a fork, enable workflows from the repository's Actions tab before pushing. New GHCR packages are private by default; change the package's visibility to public if you want unauthenticated pulls. See [GitHub's Container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
